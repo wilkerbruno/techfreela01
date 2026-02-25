@@ -1,10 +1,11 @@
 # ============================================================
 # TechFreela — Dockerfile para Easypanel
+# Contexto de build: raiz do repositório
+# Arquivo em: backend/Dockerfile
 # ============================================================
 
 FROM python:3.11-slim
 
-# Evita prompts interativos e otimiza o Python
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -19,19 +20,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# Copia e instala dependências Python
-COPY requirements.txt .
+# Copia requirements da pasta backend/ (contexto = raiz do repo)
+COPY backend/requirements.txt .
 RUN pip install --upgrade pip && \
     pip install -r requirements.txt && \
     pip install gunicorn
 
-# Copia todo o projeto
-COPY . .
+# Copia todo o conteúdo da pasta backend/
+COPY backend/ .
 
-# Porta padrão Flask/Gunicorn
+# Porta padrão
 EXPOSE 5000
 
-# Inicia com Gunicorn (produção) — 2 workers, timeout de 120s
+# Inicia com Gunicorn
 CMD ["gunicorn", "app:app", \
      "--bind", "0.0.0.0:5000", \
      "--workers", "2", \
