@@ -11,8 +11,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-WORKDIR /app
-
 # Instala dependências do sistema
 RUN apt-get update && apt-get install -y --no-install-recommends \
     default-libmysqlclient-dev \
@@ -20,19 +18,31 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# Copia requirements da pasta backend/ (contexto = raiz do repo)
-COPY backend/requirements.txt .
+# Estrutura final dentro do container:
+#   /app/             ← raiz do repo (index.html + assets/)
+#   /app/backend/     ← código Flask (app.py, models/, etc.)
+
+WORKDIR /app
+
+# Instala dependências Python
+COPY backend/requirements.txt backend/requirements.txt
 RUN pip install --upgrade pip && \
-    pip install -r requirements.txt && \
+    pip install -r backend/requirements.txt && \
     pip install gunicorn
 
-# Copia todo o conteúdo da pasta backend/
-COPY backend/ .
+# Copia frontend (index.html + assets/)
+COPY index.html .
+COPY assets/ assets/
+
+# Copia todo o backend
+COPY backend/ backend/
 
 # Porta padrão
 EXPOSE 5000
 
-# Inicia com Gunicorn
+# Roda gunicorn a partir da pasta backend/
+WORKDIR /app/backend
+
 CMD ["gunicorn", "app:app", \
      "--bind", "0.0.0.0:5000", \
      "--workers", "2", \
