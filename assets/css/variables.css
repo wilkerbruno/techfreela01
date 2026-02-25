@@ -1,0 +1,144 @@
+/* ============================================================
+   TECHFREELA — variables.css
+   Design tokens, CSS custom properties e reset base
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap');
+
+/* ---- ROOT TOKENS ---- */
+:root {
+  /* Colors */
+  --bg:        #0a0a0f;
+  --bg2:       #0f0f1a;
+  --bg3:       #14141f;
+  --surface:   #1a1a2e;
+  --surface2:  #1e1e35;
+  --border:    #2a2a45;
+  --border2:   #35356a;
+
+  --accent:    #00f5c4;
+  --accent-h:  #00ddb0;
+  --accent2:   #7c3aed;
+  --accent3:   #f59e0b;
+  --accent4:   #ec4899;
+
+  --text:      #e8e8f0;
+  --text2:     #9090b0;
+  --text3:     #5a5a80;
+
+  --red:       #ff4757;
+  --green:     #00f5c4;
+  --blue:      #3b82f6;
+
+  /* Typography */
+  --font-display: 'Syne', sans-serif;
+  --font-mono:    'Space Mono', monospace;
+  --font-body:    'DM Sans', sans-serif;
+
+  /* Radius */
+  --r-sm:  8px;
+  --r-md:  12px;
+  --r-lg:  16px;
+  --r-xl:  20px;
+  --r-2xl: 24px;
+
+  /* Shadows */
+  --shadow-sm:     0 2px 8px rgba(0,0,0,0.4);
+  --shadow-md:     0 8px 24px rgba(0,0,0,0.5);
+  --shadow-accent: 0 8px 30px rgba(0,245,196,0.25);
+  --shadow-glow:   0 0 60px rgba(0,245,196,0.1);
+
+  /* Transitions */
+  --trans-fast:   all 0.15s ease;
+  --trans-normal: all 0.25s ease;
+  --trans-slow:   all 0.4s ease;
+}
+
+/* ---- RESET ---- */
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+  transition: var(--trans-fast);
+}
+a:hover { color: var(--accent-h); }
+
+ul, ol { list-style: none; }
+
+img { max-width: 100%; display: block; }
+
+button { font-family: var(--font-body); cursor: pointer; }
+
+input, select, textarea {
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  outline: none;
+  border: none;
+}
+
+/* ---- GRID BACKGROUND ---- */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0,245,196,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,245,196,0.025) 1px, transparent 1px);
+  background-size: 50px 50px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ---- SCROLLBAR ---- */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent2); }
+
+/* ---- KEYFRAMES ---- */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(100%); }
+}
+
+@keyframes spinIn {
+  from { opacity: 0; transform: scale(0.8) rotate(-10deg); }
+  to   { opacity: 1; transform: scale(1) rotate(0); }
+}

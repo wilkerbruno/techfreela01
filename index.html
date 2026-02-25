@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="TechFreela — Plataforma de vagas freelancer e fixo para profissionais de TI. Conectamos talentos e empresas de tecnologia no Brasil.">
+  <title>TechFreela — Marketplace de TI</title>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="assets/css/variables.css">
+  <link rel="stylesheet" href="assets/css/components.css">
+  <link rel="stylesheet" href="assets/css/layout.css">
+</head>
+<body>
+
+<!-- ============================================================
+     NAVIGATION
+     ============================================================ -->
+<nav class="nav">
+  <div class="nav-logo" onclick="App.goHome()">Tech<span>Freela</span></div>
+
+  <div class="nav-links" id="nav-links">
+    <button class="btn btn-ghost" onclick="App.navigate('jobs')">🔍 Vagas</button>
+    <button class="btn btn-ghost" onclick="App.navigate('post-job')">＋ Publicar Vaga</button>
+    <button class="btn btn-ghost" onclick="App.navigate('pricing')">💎 Créditos</button>
+
+    <!-- Logged-out state -->
+    <button class="btn btn-ghost" id="nav-login-btn" onclick="UI.openModal('login-modal')">Entrar</button>
+    <button class="btn btn-md btn-primary" id="nav-register-btn" onclick="UI.openModal('register-modal')">Criar Conta</button>
+
+    <!-- Logged-in state (hidden by default) -->
+    <div class="credits-badge badge-dot" id="credits-display" style="display:none" onclick="App.navigate('pricing')" title="Seus créditos">
+      <span id="credits-val">0</span>&nbsp;créditos
+    </div>
+    <div class="nav-avatar" id="nav-avatar" style="display:none" onclick="App.navigate('profile')" title="Meu perfil">TF</div>
+    <button class="btn btn-sm btn-secondary" id="nav-admin-btn" style="display:none" onclick="App.navigate('admin')">⚙️ Admin</button>
+  </div>
+</nav>
+
+
+<!-- ============================================================
+     PAGE: HOME
+     ============================================================ -->
+<div class="page active" id="page-home">
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="hero-glow"></div>
+    <div class="section-tag">⚡ Plataforma #1 de Talentos em TI no Brasil</div>
+
+    <h1>Conecte <span class="hl">talentos</span><br>e <span class="hl2">oportunidades</span><br>em tecnologia</h1>
+
+    <p class="hero-desc">
+      O marketplace onde profissionais de TI encontram trabalho freelancer e fixo —
+      e empresas encontram os melhores devs, designers e especialistas do mercado.
+    </p>
+
+    <div class="hero-btns">
+      <button class="btn btn-xl btn-primary" onclick="App.navigate('jobs')">🔍 Buscar Vagas</button>
+      <button class="btn btn-xl btn-secondary" onclick="App.navigate('post-job')">📋 Publicar Vaga</button>
+    </div>
+
+    <div class="hero-stats">
+      <div class="stat">
+        <div class="stat-num">2.400<span>+</span></div>
+        <div class="stat-label">PROFISSIONAIS</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num">890<span>+</span></div>
+        <div class="stat-label">VAGAS ATIVAS</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num">340<span>+</span></div>
+        <div class="stat-label">EMPRESAS</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num">98<span>%</span></div>
+        <div class="stat-label">SATISFAÇÃO</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- How it works -->
+  <div class="section">
+    <div class="section-tag">COMO FUNCIONA</div>
+    <h2 class="section-title">Simples. Transparente.<br>Eficiente.</h2>
+    <p class="section-sub">Sistema de créditos justo — sem mensalidade, pague só pelo que usar</p>
+
+    <div class="how-grid">
+      <div class="card card-hover card-accent-top">
+        <div class="how-num">// 01</div>
+        <div class="how-icon">👤</div>
+        <h3>Crie seu perfil</h3>
+        <p>Monte seu currículo digital com experiências, habilidades, portfólio e conquistas. Destaque-se para recrutadores.</p>
+      </div>
+      <div class="card card-hover card-accent-top">
+        <div class="how-num">// 02</div>
+        <div class="how-icon">💳</div>
+        <h3>Compre créditos</h3>
+        <p>Adquira pacotes a partir de R$&nbsp;9,90. Use-os para candidatar em vagas ou publicar posições da sua empresa.</p>
+      </div>
+      <div class="card card-hover card-accent-top">
+        <div class="how-num">// 03</div>
+        <div class="how-icon">🎯</div>
+        <h3>Encontre o match</h3>
+        <p>Candidatos gastam créditos para se candidatar. Empresas gastam para publicar vagas e acessar currículos.</p>
+      </div>
+      <div class="card card-hover card-accent-top">
+        <div class="how-num">// 04</div>
+        <div class="how-icon">🚀</div>
+        <h3>Feche o negócio</h3>
+        <p>Com perfil visível e vaga publicada, o processo seletivo acontece diretamente entre as partes. Sem intermediário.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Credit cost table -->
+  <div class="section" style="padding-top:0">
+    <div class="cost-table-wrap">
+      <div>
+        <div class="cost-table-label">TABELA DE CRÉDITOS</div>
+        <div class="cost-table-title">Como os créditos<br>são utilizados</div>
+      </div>
+      <div>
+        <div class="cost-row">
+          <span class="cost-row-label">🔍 Ver detalhes de vaga</span>
+          <span class="cost-row-val">2 créditos</span>
+        </div>
+        <div class="cost-row">
+          <span class="cost-row-label">📨 Candidatar-se a vaga</span>
+          <span class="cost-row-val">5 créditos</span>
+        </div>
+        <div class="cost-row">
+          <span class="cost-row-label">📋 Publicar vaga (30 dias)</span>
+          <span class="cost-row-val">20 créditos</span>
+        </div>
+        <div class="cost-row">
+          <span class="cost-row-label">👁️ Ver currículo completo</span>
+          <span class="cost-row-val">3 créditos</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /page-home -->
+
+
+<!-- ============================================================
+     PAGE: JOBS
+     ============================================================ -->
+<div class="page" id="page-jobs">
+  <div class="section">
+    <h2 class="section-title">Vagas em TI</h2>
+    <p class="section-sub">
+      Encontre sua próxima oportunidade —
+      <span style="color:var(--accent3);font-family:var(--font-mono);font-size:0.8rem">2 créditos</span> para ver os detalhes
+    </p>
+
+    <div class="search-bar">
+      <input
+        type="text"
+        class="search-input"
+        id="job-search"
+        placeholder="🔍  Buscar por cargo, empresa, tecnologia..."
+        oninput="App.filterJobs()"
+      >
+      <select class="filter-select" id="job-type-filter" onchange="App.filterJobs()">
+        <option value="">Tipo: Todos</option>
+        <option value="Freelance">Freelance</option>
+        <option value="CLT">CLT</option>
+        <option value="PJ">PJ</option>
+        <option value="Remoto">Remoto</option>
+        <option value="Híbrido">Híbrido</option>
+      </select>
+      <select class="filter-select" id="job-area-filter" onchange="App.filterJobs()">
+        <option value="">Área: Todas</option>
+        <option value="Frontend">Frontend</option>
+        <option value="Backend">Backend</option>
+        <option value="Mobile">Mobile</option>
+        <option value="DevOps">DevOps</option>
+        <option value="Data">Data Science</option>
+        <option value="UX">UX/UI</option>
+        <option value="QA">QA</option>
+        <option value="Segurança">Segurança</option>
+      </select>
+    </div>
+
+    <div class="jobs-list" id="jobs-list"></div>
+  </div>
+</div><!-- /page-jobs -->
+
+
+<!-- ============================================================
+     PAGE: POST JOB
+     ============================================================ -->
+<div class="page" id="page-post-job">
+  <div class="section">
+
+    <div class="post-hero">
+      <h2>Publique sua vaga</h2>
+      <p>Alcance milhares de profissionais qualificados. Cada publicação fica ativa por 30 dias.</p>
+      <div class="badge badge-warning">⚡ Custo: 20 créditos por vaga (≈ R$&nbsp;2,00)</div>
+    </div>
+
+    <div class="form-card">
+      <div class="form-card-title">📋 Informações da Vaga</div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">TÍTULO DA VAGA *</label>
+          <input type="text" class="form-input" id="pj-title" placeholder="ex: Desenvolvedor React Sênior">
+        </div>
+        <div class="form-group">
+          <label class="form-label">EMPRESA *</label>
+          <input type="text" class="form-input" id="pj-company" placeholder="Nome da empresa ou 'Freelancer'">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">TIPO DE CONTRATO *</label>
+          <select class="form-select" id="pj-type">
+            <option value="">Selecione...</option>
+            <option>Freelance</option>
+            <option>CLT</option>
+            <option>PJ</option>
+            <option>Estágio</option>
+            <option>Temporário</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">MODALIDADE *</label>
+          <select class="form-select" id="pj-mode">
+            <option value="">Selecione...</option>
+            <option>Remoto</option>
+            <option>Presencial</option>
+            <option>Híbrido</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">FAIXA SALARIAL</label>
+          <input type="text" class="form-input" id="pj-salary" placeholder="ex: R$ 8.000 – R$ 12.000 / mês">
+        </div>
+        <div class="form-group">
+          <label class="form-label">LOCALIZAÇÃO</label>
+          <input type="text" class="form-input" id="pj-location" placeholder="ex: São Paulo, SP">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">STACK / TECNOLOGIAS *</label>
+        <input type="text" class="form-input" id="pj-stack" placeholder="ex: React, Node.js, TypeScript, AWS (separado por vírgulas)">
+        <div class="form-hint">Separe as tecnologias por vírgula. Máx. 6 tags visíveis.</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">DESCRIÇÃO DA VAGA *</label>
+        <textarea class="form-textarea" id="pj-desc" style="min-height:140px"
+          placeholder="Descreva as responsabilidades, o contexto do projeto, cultura da empresa e tudo que o candidato precisa saber..."></textarea>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">REQUISITOS (um por linha)</label>
+        <textarea class="form-textarea" id="pj-reqs"
+          placeholder="3+ anos de experiência com React&#10;Inglês intermediário&#10;Experiência com metodologias ágeis&#10;Portfolio de projetos (diferencial)"></textarea>
+      </div>
+
+      <div class="form-alert form-alert-warning">
+        <span class="form-alert-icon">💳</span>
+        <div>
+          <div class="form-alert-title">Custo de publicação</div>
+          <div class="form-alert-body">
+            Ao publicar, <strong style="color:var(--accent3)">20 créditos</strong> serão debitados.
+            Saldo atual: <span id="pj-credits-balance" style="color:var(--accent3);font-family:var(--font-mono)">0 créditos</span>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn btn-full btn-primary" onclick="App.postJob()">⚡ Publicar Vaga por 20 Créditos</button>
+    </div>
+
+  </div>
+</div><!-- /page-post-job -->
+
+
+<!-- ============================================================
+     PAGE: PRICING
+     ============================================================ -->
+<div class="page" id="page-pricing">
+  <div class="section">
+    <div class="section-tag">CRÉDITOS</div>
+    <h2 class="section-title">Preços simples e acessíveis</h2>
+    <p class="section-sub">Compre créditos e use quando quiser — sem mensalidade, sem surpresas</p>
+
+    <div class="pricing-grid">
+
+      <div class="pricing-card card-hover">
+        <div class="pricing-credits"><small>🪙 </small>50</div>
+        <div class="pricing-credits-label">CRÉDITOS</div>
+        <div class="pricing-price">R$ 9,90 <small>/ único</small></div>
+        <ul class="pricing-features">
+          <li><span class="pricing-check">✓</span> Ver detalhes de 25 vagas</li>
+          <li><span class="pricing-check">✓</span> 10 candidaturas</li>
+          <li><span class="pricing-check">✓</span> 2 publicações de vaga</li>
+          <li><span class="pricing-check">✓</span> Créditos sem prazo de validade</li>
+        </ul>
+        <button class="btn btn-full btn-secondary" onclick="App.buyCredits(50)">Comprar 50 créditos</button>
+      </div>
+
+      <div class="pricing-card card-hover featured">
+        <div class="pricing-credits"><small>💎 </small>150</div>
+        <div class="pricing-credits-label">CRÉDITOS</div>
+        <div class="pricing-price">R$ 24,90 <small>/ único</small></div>
+        <ul class="pricing-features">
+          <li><span class="pricing-check">✓</span> Ver detalhes de 75 vagas</li>
+          <li><span class="pricing-check">✓</span> 30 candidaturas</li>
+          <li><span class="pricing-check">✓</span> 7 publicações de vaga</li>
+          <li><span class="pricing-check">✓</span> Créditos sem prazo de validade</li>
+          <li><span class="pricing-check">✓</span> <strong>Economia de 16%</strong></li>
+        </ul>
+        <button class="btn btn-full btn-primary" onclick="App.buyCredits(150)">Comprar 150 créditos</button>
+      </div>
+
+      <div class="pricing-card card-hover">
+        <div class="pricing-credits"><small>🚀 </small>400</div>
+        <div class="pricing-credits-label">CRÉDITOS</div>
+        <div class="pricing-price">R$ 59,90 <small>/ único</small></div>
+        <ul class="pricing-features">
+          <li><span class="pricing-check">✓</span> Ver detalhes de 200 vagas</li>
+          <li><span class="pricing-check">✓</span> 80 candidaturas</li>
+          <li><span class="pricing-check">✓</span> 20 publicações de vaga</li>
+          <li><span class="pricing-check">✓</span> Créditos sem prazo de validade</li>
+          <li><span class="pricing-check">✓</span> <strong>Economia de 25%</strong></li>
+        </ul>
+        <button class="btn btn-full btn-secondary" onclick="App.buyCredits(400)">Comprar 400 créditos</button>
+      </div>
+
+    </div>
+
+    <div style="text-align:center;margin-top:2.5rem;color:var(--text3);font-size:0.82rem">
+      🔒 Pagamento seguro · Créditos nunca expiram · Reembolso em 7 dias
+    </div>
+  </div>
+</div><!-- /page-pricing -->
+
+
+<!-- ============================================================
+     PAGE: PROFILE
+     ============================================================ -->
+<div class="page" id="page-profile">
+  <div class="section">
+
+    <!-- Profile Header -->
+    <div class="profile-header">
+      <div class="profile-avatar" id="profile-avatar-el">TF</div>
+      <div class="profile-info">
+        <div class="profile-name" id="profile-name-el">Carregando...</div>
+        <div class="profile-role" id="profile-role-el">// DESENVOLVEDOR</div>
+        <div class="profile-bio"  id="profile-bio-el"></div>
+        <div class="job-tags" style="margin-top:0.75rem" id="profile-tags"></div>
+      </div>
+      <div class="profile-credits-box">
+        <div class="profile-credits-num" id="profile-credits-num">0</div>
+        <div class="profile-credits-label">CRÉDITOS</div>
+        <button class="btn btn-sm btn-primary" style="width:100%;margin-top:0.75rem" onclick="App.navigate('pricing')">
+          + Comprar
+        </button>
+      </div>
+    </div>
+
+    <!-- Action buttons -->
+    <div class="profile-actions">
+      <button class="btn btn-sm btn-secondary" onclick="App.openEditProfile()">✏️ Editar Perfil</button>
+      <button class="btn btn-sm btn-secondary" onclick="UI.openModal('add-portfolio-modal')">+ Portfólio</button>
+      <button class="btn btn-sm btn-secondary" onclick="UI.openModal('add-exp-modal')">+ Experiência</button>
+    </div>
+
+    <!-- Profile Grid -->
+    <div class="profile-grid">
+      <!-- Left column -->
+      <div>
+        <div class="card" style="margin-bottom:1.5rem">
+          <h3 style="font-family:var(--font-display);font-weight:700;font-size:1rem;margin-bottom:1.25rem">💼 Experiências</h3>
+          <div id="exp-list">
+            <div class="empty-state" style="padding:1.5rem">
+              <div class="empty-state-text">Carregando...</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 style="font-family:var(--font-display);font-weight:700;font-size:1rem;margin-bottom:1.25rem">🗂️ Portfólio</h3>
+          <div class="portfolio-grid" id="portfolio-grid"></div>
+        </div>
+      </div>
+
+      <!-- Right column -->
+      <div>
+        <div class="card" style="margin-bottom:1.5rem">
+          <h3 style="font-family:var(--font-display);font-weight:700;font-size:1rem;margin-bottom:1.25rem">⚡ Habilidades</h3>
+          <div id="skills-list">
+            <div class="skill-item"><span class="skill-item-name">React</span><div class="skill-bar-wrap"><div class="skill-bar" style="width:92%"></div></div></div>
+            <div class="skill-item"><span class="skill-item-name">Node.js</span><div class="skill-bar-wrap"><div class="skill-bar" style="width:85%"></div></div></div>
+            <div class="skill-item"><span class="skill-item-name">TypeScript</span><div class="skill-bar-wrap"><div class="skill-bar" style="width:80%"></div></div></div>
+            <div class="skill-item"><span class="skill-item-name">AWS</span><div class="skill-bar-wrap"><div class="skill-bar" style="width:70%"></div></div></div>
+            <div class="skill-item"><span class="skill-item-name">PostgreSQL</span><div class="skill-bar-wrap"><div class="skill-bar" style="width:75%"></div></div></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 style="font-family:var(--font-display);font-weight:700;font-size:1rem;margin-bottom:1.25rem">📨 Minhas Candidaturas</h3>
+          <div id="applied-jobs-list"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div><!-- /page-profile -->
+
+
+<!-- ============================================================
+     MODALS
+     ============================================================ -->
+
+<!-- LOGIN -->
+<div class="modal-overlay" id="login-modal">
+  <div class="modal modal-narrow">
+    <button class="modal-close" onclick="UI.closeModal('login-modal')">✕</button>
+    <div class="modal-title">Bem-vindo de volta 👋</div>
+    <div class="modal-sub">Entre na sua conta TechFreela</div>
+
+    <div class="form-group">
+      <label class="form-label">E-MAIL</label>
+      <input type="email" class="form-input" id="login-email" placeholder="seu@email.com">
+    </div>
+    <div class="form-group">
+      <label class="form-label">SENHA</label>
+      <input type="password" class="form-input" id="login-pass" placeholder="••••••••"
+             onkeydown="if(event.key==='Enter') App.doLogin()">
+    </div>
+
+    <button class="btn btn-full btn-primary" onclick="App.doLogin()">Entrar</button>
+    <div class="divider">ou</div>
+    <button class="btn btn-full btn-secondary" onclick="UI.closeModal('login-modal'); UI.openModal('register-modal')">
+      Criar conta grátis
+    </button>
+  </div>
+</div>
+
+<!-- REGISTER -->
+<div class="modal-overlay" id="register-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="UI.closeModal('register-modal')">✕</button>
+    <div class="modal-title">Criar conta 🚀</div>
+    <div class="modal-sub">Junte-se a 2.400+ profissionais de TI</div>
+
+    <div class="tab-switcher">
+      <button class="tab-btn active" id="tab-dev"     onclick="App.switchRegisterTab('dev')">👨‍💻 Profissional</button>
+      <button class="tab-btn"        id="tab-company" onclick="App.switchRegisterTab('company')">🏢 Empresa</button>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">NOME COMPLETO *</label>
+        <input type="text" class="form-input" id="reg-name" placeholder="Seu nome">
+      </div>
+      <div class="form-group">
+        <label class="form-label">E-MAIL *</label>
+        <input type="email" class="form-input" id="reg-email" placeholder="seu@email.com">
+      </div>
+    </div>
+
+    <div class="form-group" id="reg-role-group">
+      <label class="form-label">ÁREA DE ATUAÇÃO</label>
+      <select class="form-select" id="reg-role">
+        <option value="">Selecione...</option>
+        <option>Frontend Developer</option>
+        <option>Backend Developer</option>
+        <option>Fullstack Developer</option>
+        <option>Mobile Developer</option>
+        <option>DevOps / SRE</option>
+        <option>Data Scientist</option>
+        <option>UX/UI Designer</option>
+        <option>QA Engineer</option>
+        <option>Tech Lead</option>
+        <option>CTO / Tech Manager</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">SENHA *</label>
+      <input type="password" class="form-input" id="reg-pass" placeholder="Min. 6 caracteres">
+    </div>
+
+    <div class="form-alert form-alert-success">
+      <span class="form-alert-icon">🎁</span>
+      <div>
+        <div class="form-alert-title" style="color:var(--accent)">Bônus de boas-vindas</div>
+        <div class="form-alert-body">Ganhe <strong>10 créditos grátis</strong> ao criar sua conta!</div>
+      </div>
+    </div>
+
+    <button class="btn btn-full btn-primary" onclick="App.doRegister()">Criar conta grátis</button>
+  </div>
+</div>
+
+<!-- JOB DETAIL -->
+<div class="modal-overlay" id="job-detail-modal">
+  <div class="modal modal-wide">
+    <button class="modal-close" onclick="UI.closeModal('job-detail-modal')">✕</button>
+    <div id="job-detail-content"></div>
+  </div>
+</div>
+
+<!-- EDIT PROFILE -->
+<div class="modal-overlay" id="edit-profile-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="UI.closeModal('edit-profile-modal')">✕</button>
+    <div class="modal-title">Editar Perfil ✏️</div>
+    <div class="modal-sub">Mantenha suas informações atualizadas</div>
+
+    <div class="form-group">
+      <label class="form-label">NOME</label>
+      <input type="text" class="form-input" id="edit-name" placeholder="Seu nome completo">
+    </div>
+    <div class="form-group">
+      <label class="form-label">CARGO / TÍTULO</label>
+      <input type="text" class="form-input" id="edit-title" placeholder="ex: Fullstack Developer">
+    </div>
+    <div class="form-group">
+      <label class="form-label">BIO / RESUMO</label>
+      <textarea class="form-textarea" id="edit-bio" placeholder="Conte sobre você, suas especialidades e diferenciais..."></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">TECNOLOGIAS (separadas por vírgula)</label>
+      <input type="text" class="form-input" id="edit-skills" placeholder="React, Node.js, Python, AWS...">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">LINKEDIN</label>
+        <input type="text" class="form-input" id="edit-linkedin" placeholder="linkedin.com/in/...">
+      </div>
+      <div class="form-group">
+        <label class="form-label">GITHUB</label>
+        <input type="text" class="form-input" id="edit-github" placeholder="github.com/...">
+      </div>
+    </div>
+    <button class="btn btn-full btn-primary" onclick="App.saveProfile()">💾 Salvar Perfil</button>
+  </div>
+</div>
+
+<!-- ADD PORTFOLIO -->
+<div class="modal-overlay" id="add-portfolio-modal">
+  <div class="modal modal-narrow">
+    <button class="modal-close" onclick="UI.closeModal('add-portfolio-modal')">✕</button>
+    <div class="modal-title">Adicionar Projeto 🗂️</div>
+    <div class="modal-sub">Mostre seu trabalho para recrutadores</div>
+
+    <div class="form-group">
+      <label class="form-label">EMOJI DO PROJETO</label>
+      <input type="text" class="form-input" id="port-emoji" placeholder="ex: 🚀 🛒 📊 📱" maxlength="2">
+    </div>
+    <div class="form-group">
+      <label class="form-label">NOME DO PROJETO *</label>
+      <input type="text" class="form-input" id="port-name" placeholder="Nome do projeto">
+    </div>
+    <div class="form-group">
+      <label class="form-label">STACK UTILIZADA</label>
+      <input type="text" class="form-input" id="port-stack" placeholder="ex: React + Node.js + MongoDB">
+    </div>
+    <div class="form-group">
+      <label class="form-label">DESCRIÇÃO</label>
+      <textarea class="form-textarea" id="port-desc" placeholder="Descreva o projeto, seu papel e resultados..."></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">LINK (GitHub, Demo, Behance...)</label>
+      <input type="text" class="form-input" id="port-link" placeholder="https://...">
+    </div>
+    <button class="btn btn-full btn-primary" onclick="App.addPortfolio()">+ Adicionar ao Portfólio</button>
+  </div>
+</div>
+
+<!-- ADD EXPERIENCE -->
+<div class="modal-overlay" id="add-exp-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="UI.closeModal('add-exp-modal')">✕</button>
+    <div class="modal-title">Adicionar Experiência 💼</div>
+    <div class="modal-sub">Conte sua trajetória profissional</div>
+
+    <div class="form-group">
+      <label class="form-label">CARGO *</label>
+      <input type="text" class="form-input" id="exp-title-input" placeholder="ex: Desenvolvedor Frontend Sênior">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">EMPRESA *</label>
+        <input type="text" class="form-input" id="exp-company-input" placeholder="Nome da empresa">
+      </div>
+      <div class="form-group">
+        <label class="form-label">LOCALIZAÇÃO</label>
+        <input type="text" class="form-input" id="exp-loc-input" placeholder="ex: Remoto / São Paulo, SP">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">INÍCIO</label>
+        <input type="text" class="form-input" id="exp-start" placeholder="ex: Jan 2022">
+      </div>
+      <div class="form-group">
+        <label class="form-label">FIM (ou "Atual")</label>
+        <input type="text" class="form-input" id="exp-end" placeholder="ex: Atual">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">DESCRIÇÃO DAS ATIVIDADES</label>
+      <textarea class="form-textarea" id="exp-desc-input"
+        placeholder="Descreva suas responsabilidades, tecnologias usadas e resultados alcançados..."></textarea>
+    </div>
+    <button class="btn btn-full btn-primary" onclick="App.addExperience()">+ Adicionar Experiência</button>
+  </div>
+</div>
+
+
+<!-- ============================================================
+     PAGE: ADMIN
+     ============================================================ -->
+<div class="page" id="page-admin">
+  <div class="section">
+    <div class="section-tag">⚙️ PAINEL ADMINISTRATIVO</div>
+    <h2 class="section-title" style="margin-bottom:2rem">Configurações da Plataforma</h2>
+
+    <!-- Stats Row -->
+    <div class="how-grid" id="admin-stats-row" style="margin-bottom:2.5rem">
+      <div class="card" style="text-align:center">
+        <div style="font-size:2rem;font-weight:800;color:var(--accent)" id="adm-stat-users">—</div>
+        <div style="font-size:0.75rem;color:var(--text3);margin-top:0.25rem">USUÁRIOS</div>
+      </div>
+      <div class="card" style="text-align:center">
+        <div style="font-size:2rem;font-weight:800;color:var(--accent)" id="adm-stat-jobs">—</div>
+        <div style="font-size:0.75rem;color:var(--text3);margin-top:0.25rem">VAGAS ATIVAS</div>
+      </div>
+      <div class="card" style="text-align:center">
+        <div style="font-size:2rem;font-weight:800;color:var(--accent)" id="adm-stat-payments">—</div>
+        <div style="font-size:0.75rem;color:var(--text3);margin-top:0.25rem">PAGAMENTOS CONCLUÍDOS</div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tab-switcher" style="margin-bottom:2rem">
+      <button class="tab-btn active" onclick="App.adminTab('config')" id="adm-tab-config">💳 Pagamentos</button>
+      <button class="tab-btn" onclick="App.adminTab('payments')" id="adm-tab-payments">📋 Histórico</button>
+    </div>
+
+    <!-- Tab: Config -->
+    <div id="adm-panel-config">
+      <div class="card">
+        <h3 style="font-family:var(--font-display);font-weight:700;font-size:1.05rem;margin-bottom:1.5rem">
+          🔑 NOWPayments — Configuração
+        </h3>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">API KEY (NOWPayments)</label>
+            <input type="password" class="form-input" id="adm-api-key" placeholder="Sua chave de API da NOWPayments" autocomplete="off">
+            <small style="color:var(--text3);font-size:0.75rem">Obtida em <a href="https://nowpayments.io" target="_blank" style="color:var(--accent)">nowpayments.io</a> → API Keys</small>
+          </div>
+          <div class="form-group">
+            <label class="form-label">IPN SECRET</label>
+            <input type="password" class="form-input" id="adm-ipn-secret" placeholder="Segredo para validar webhooks" autocomplete="off">
+            <small style="color:var(--text3);font-size:0.75rem">Gerado nas configurações de IPN da NOWPayments</small>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">CARTEIRA DE RECEBIMENTO (USDT — Bybit ou outra)</label>
+          <input type="text" class="form-input" id="adm-wallet" placeholder="Endereço TRC20 / ERC20 / etc da sua carteira Bybit">
+          <small style="color:var(--text3);font-size:0.75rem">Os pagamentos serão convertidos e enviados automaticamente para este endereço</small>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">MOEDA DE RECEBIMENTO</label>
+            <select class="form-select" id="adm-currency">
+              <option value="usdttrc20">USDT (TRC20 — Bybit padrão)</option>
+              <option value="usdterc20">USDT (ERC20)</option>
+              <option value="usdtbep20">USDT (BEP20 / BSC)</option>
+              <option value="usdc">USDC</option>
+              <option value="btc">BTC</option>
+              <option value="eth">ETH</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">AMBIENTE</label>
+            <select class="form-select" id="adm-sandbox">
+              <option value="true">🧪 Sandbox (Testes)</option>
+              <option value="false">🚀 Produção</option>
+            </select>
+            <small style="color:var(--text3);font-size:0.75rem">Use sandbox para testar antes de ir a produção</small>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:1rem;margin-top:0.5rem;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="App.adminSaveConfig()">💾 Salvar Configurações</button>
+          <button class="btn btn-secondary" onclick="App.adminTestConnection()">🔌 Testar Conexão</button>
+        </div>
+
+        <div style="margin-top:1.5rem;padding:1.25rem;background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.18);border-radius:12px">
+          <div style="font-size:0.8rem;font-weight:700;color:var(--accent);margin-bottom:0.75rem">📋 INSTRUÇÕES DE CONFIGURAÇÃO</div>
+          <ol style="font-size:0.8rem;color:var(--text2);line-height:1.8;padding-left:1.25rem;margin:0">
+            <li>Crie uma conta em <strong>nowpayments.io</strong></li>
+            <li>Gere uma <strong>API Key</strong> em Settings → API Keys</li>
+            <li>Configure o <strong>IPN Callback URL</strong> para: <code style="background:rgba(255,255,255,0.05);padding:0.1rem 0.4rem;border-radius:4px">/api/payments/webhook</code></li>
+            <li>Copie o <strong>IPN Secret</strong> gerado pela NOWPayments</li>
+            <li>Cole o endereço da sua <strong>carteira Bybit USDT-TRC20</strong></li>
+            <li>Teste com sandbox, depois mude para <strong>Produção</strong></li>
+          </ol>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: Payments history -->
+    <div id="adm-panel-payments" style="display:none">
+      <div class="card">
+        <h3 style="font-family:var(--font-display);font-weight:700;font-size:1.05rem;margin-bottom:1.25rem">📋 Histórico de Pagamentos</h3>
+        <div id="adm-payments-list">
+          <div class="empty-state"><div class="loading-spinner" style="margin:0 auto"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div><!-- /page-admin -->
+
+
+<!-- ============================================================
+     MODAL: PAYMENT
+     ============================================================ -->
+<div class="modal-overlay" id="payment-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="UI.closeModal('payment-modal')">✕</button>
+    <div class="modal-title">💳 Comprar Créditos</div>
+    <div class="modal-sub" id="payment-modal-sub">Selecione o método de pagamento</div>
+
+    <!-- Package summary -->
+    <div style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:12px;padding:1rem 1.25rem;margin-bottom:1.5rem" id="payment-pkg-summary">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-weight:700;color:var(--text1)" id="pay-pkg-name">— créditos</div>
+          <div style="font-size:0.78rem;color:var(--text3);margin-top:0.15rem" id="pay-pkg-label">Pacote</div>
+        </div>
+        <div style="font-size:1.4rem;font-weight:800;color:var(--accent)" id="pay-pkg-price">R$ —</div>
+      </div>
+    </div>
+
+    <!-- Payment methods -->
+    <div style="margin-bottom:1.25rem">
+      <label class="form-label" style="margin-bottom:0.75rem;display:block">FORMA DE PAGAMENTO</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem" id="pay-methods">
+        <button class="pay-method-btn active" id="pmb-pix" onclick="App.selectPayMethod('pix')">
+          <span style="font-size:1.5rem">⚡</span>
+          <div>
+            <div style="font-weight:700;font-size:0.85rem">PIX</div>
+            <div style="font-size:0.7rem;color:var(--text3)">Instantâneo</div>
+          </div>
+        </button>
+        <button class="pay-method-btn" id="pmb-credit_card" onclick="App.selectPayMethod('credit_card')">
+          <span style="font-size:1.5rem">💳</span>
+          <div>
+            <div style="font-weight:700;font-size:0.85rem">Crédito</div>
+            <div style="font-size:0.7rem;color:var(--text3)">Parcelado</div>
+          </div>
+        </button>
+        <button class="pay-method-btn" id="pmb-debit_card" onclick="App.selectPayMethod('debit_card')">
+          <span style="font-size:1.5rem">🏧</span>
+          <div>
+            <div style="font-weight:700;font-size:0.85rem">Débito</div>
+            <div style="font-size:0.7rem;color:var(--text3)">À vista</div>
+          </div>
+        </button>
+        <button class="pay-method-btn" id="pmb-crypto" onclick="App.selectPayMethod('crypto')">
+          <span style="font-size:1.5rem">₿</span>
+          <div>
+            <div style="font-weight:700;font-size:0.85rem">Crypto</div>
+            <div style="font-size:0.7rem;color:var(--text3)">BTC, ETH…</div>
+          </div>
+        </button>
+      </div>
+    </div>
+
+    <div style="font-size:0.78rem;color:var(--text3);text-align:center;margin-bottom:1.25rem">
+      🔒 Pagamento seguro via <strong>NOWPayments</strong> · Convertido automaticamente para USDT
+    </div>
+
+    <button class="btn btn-full btn-primary" onclick="App.confirmPayment()" id="btn-confirm-pay">
+      ⚡ Ir para Pagamento
+    </button>
+
+    <div id="pay-status-area" style="display:none;margin-top:1.25rem;text-align:center">
+      <div class="loading-spinner" style="margin:0 auto 0.75rem"></div>
+      <div style="font-size:0.85rem;color:var(--text2)" id="pay-status-msg">Aguardando pagamento…</div>
+      <div style="font-size:0.75rem;color:var(--text3);margin-top:0.5rem">A janela de pagamento foi aberta. Conclua o pagamento e aguarde a confirmação.</div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ============================================================
+     TOAST NOTIFICATION
+     ============================================================ -->
+<div id="toast">
+  <span class="toast-icon" id="toast-icon">✅</span>
+  <span class="toast-msg"  id="toast-msg">Operação realizada!</span>
+</div>
+
+
+<!-- ============================================================
+     FOOTER
+     ============================================================ -->
+<footer class="footer">
+  <span>TechFreela © 2025</span> —
+  <span>Marketplace de TI</span> ·
+  <a href="#">Termos</a> ·
+  <a href="#">Privacidade</a> ·
+  <a href="#">Contato</a>
+</footer>
+
+
+<!-- ============================================================
+     SCRIPTS (order matters!)
+     ============================================================ -->
+<script src="assets/js/state.js"></script>
+<script src="assets/js/data.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/app.js"></script>
+
+</body>
+</html>
