@@ -661,11 +661,35 @@
           🔑 NOWPayments — Configuração
         </h3>
 
+        <!-- Ambiente em destaque -->
+        <div style="margin-bottom:1.5rem">
+          <label class="form-label" style="margin-bottom:0.5rem;display:block">⚠️ AMBIENTE (escolha ANTES de copiar a API Key)</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem">
+            <label id="env-sandbox-label" style="display:flex;align-items:center;gap:0.75rem;padding:0.85rem 1rem;border:2px solid var(--accent);border-radius:12px;cursor:pointer;background:rgba(99,102,241,0.08)">
+              <input type="radio" name="adm-sandbox-radio" value="true" id="radio-sandbox" onchange="App.adminUpdateEnv()" style="accent-color:var(--accent)">
+              <div>
+                <div style="font-weight:700;font-size:0.9rem">🧪 Sandbox</div>
+                <div style="font-size:0.72rem;color:var(--text3)">Para testes — não cobra dinheiro real</div>
+              </div>
+            </label>
+            <label id="env-prod-label" style="display:flex;align-items:center;gap:0.75rem;padding:0.85rem 1rem;border:1.5px solid var(--border2);border-radius:12px;cursor:pointer">
+              <input type="radio" name="adm-sandbox-radio" value="false" id="radio-prod" onchange="App.adminUpdateEnv()" style="accent-color:var(--accent)">
+              <div>
+                <div style="font-weight:700;font-size:0.9rem">🚀 Produção</div>
+                <div style="font-size:0.72rem;color:var(--text3)">Dinheiro real — use a chave de produção</div>
+              </div>
+            </label>
+          </div>
+          <div id="adm-env-warning" style="margin-top:0.6rem;padding:0.6rem 0.85rem;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:8px;font-size:0.78rem;color:#f59e0b">
+            ⚠️ <strong>Atenção:</strong> as chaves de Sandbox e Produção são DIFERENTES na NOWPayments. A chave que você pegar em <em>nowpayments.io → Configurações → API Keys</em> deve ser do mesmo ambiente selecionado acima.
+          </div>
+        </div>
+
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">API KEY (NOWPayments)</label>
-            <input type="password" class="form-input" id="adm-api-key" placeholder="Sua chave de API da NOWPayments" autocomplete="off">
-            <small style="color:var(--text3);font-size:0.75rem">Obtida em <a href="https://nowpayments.io" target="_blank" style="color:var(--accent)">nowpayments.io</a> → API Keys</small>
+            <input type="password" class="form-input" id="adm-api-key" placeholder="Cole aqui a API Key do ambiente selecionado" autocomplete="off">
+            <div id="adm-api-key-preview" style="font-size:0.73rem;color:var(--text3);margin-top:0.3rem"></div>
           </div>
           <div class="form-group">
             <label class="form-label">IPN SECRET</label>
@@ -673,6 +697,9 @@
             <small style="color:var(--text3);font-size:0.75rem">Gerado nas configurações de IPN da NOWPayments</small>
           </div>
         </div>
+
+        <!-- Campo oculto para sandbox -->
+        <input type="hidden" id="adm-sandbox" value="true">
 
         <div class="form-group">
           <label class="form-label">CARTEIRA DE RECEBIMENTO (USDT — Bybit ou outra)</label>
@@ -692,46 +719,17 @@
               <option value="eth">ETH</option>
             </select>
           </div>
-          <div class="form-group">
-            <label class="form-label">AMBIENTE</label>
-            <select class="form-select" id="adm-sandbox">
-              <option value="true">🧪 Sandbox (Testes)</option>
-              <option value="false">🚀 Produção</option>
-            </select>
-            <small style="color:var(--text3);font-size:0.75rem">Use sandbox para testar antes de ir a produção</small>
-          </div>
+          <div class="form-group"></div>
         </div>
 
         <div style="display:flex;gap:1rem;margin-top:0.5rem;flex-wrap:wrap">
           <button class="btn btn-primary" onclick="App.adminSaveConfig()">💾 Salvar Configurações</button>
-          <button class="btn btn-secondary" onclick="App.adminTestConnection()">🔌 Testar Conexão</button>
-        </div>
-
-        <div style="margin-top:1.5rem;padding:1.25rem;background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.18);border-radius:12px">
-          <div style="font-size:0.8rem;font-weight:700;color:var(--accent);margin-bottom:0.75rem">📋 INSTRUÇÕES DE CONFIGURAÇÃO</div>
-          <ol style="font-size:0.8rem;color:var(--text2);line-height:1.8;padding-left:1.25rem;margin:0">
-            <li>Crie uma conta em <strong>nowpayments.io</strong></li>
-            <li>Gere uma <strong>API Key</strong> em Settings → API Keys</li>
-            <li>Configure o <strong>IPN Callback URL</strong> para: <code style="background:rgba(255,255,255,0.05);padding:0.1rem 0.4rem;border-radius:4px">/api/payments/webhook</code></li>
-            <li>Copie o <strong>IPN Secret</strong> gerado pela NOWPayments</li>
-            <li>Cole o endereço da sua <strong>carteira Bybit USDT-TRC20</strong></li>
-            <li>Teste com sandbox, depois mude para <strong>Produção</strong></li>
-          </ol>
+          <button class="btn btn-secondary" onclick="App.adminTestConnection()">🔌 Testar Conexão Crypto</button>
         </div>
       </div>
-    </div>
 
-    <!-- Tab: Payments history -->
-    <div id="adm-panel-payments" style="display:none">
-      <div class="card">
-        <h3 style="font-family:var(--font-display);font-weight:700;font-size:1.05rem;margin-bottom:1.25rem">📋 Histórico de Pagamentos</h3>
-        <div id="adm-payments-list">
-          <div class="empty-state"><div class="loading-spinner" style="margin:0 auto"></div></div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div><!-- /page-admin -->
+      
+    </div><!-- /page-admin -->
 
 
 <!-- ============================================================
@@ -757,40 +755,36 @@
     <!-- Payment methods -->
     <div style="margin-bottom:1.25rem">
       <label class="form-label" style="margin-bottom:0.75rem;display:block">FORMA DE PAGAMENTO</label>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem" id="pay-methods">
-        <button class="pay-method-btn active" id="pmb-pix" onclick="App.selectPayMethod('pix')">
-          <span style="font-size:1.5rem">⚡</span>
-          <div>
-            <div style="font-weight:700;font-size:0.85rem">PIX</div>
-            <div style="font-size:0.7rem;color:var(--text3)">Instantâneo</div>
-          </div>
-        </button>
-        <button class="pay-method-btn" id="pmb-credit_card" onclick="App.selectPayMethod('credit_card')">
-          <span style="font-size:1.5rem">💳</span>
-          <div>
-            <div style="font-weight:700;font-size:0.85rem">Crédito</div>
-            <div style="font-size:0.7rem;color:var(--text3)">Parcelado</div>
-          </div>
-        </button>
-        <button class="pay-method-btn" id="pmb-debit_card" onclick="App.selectPayMethod('debit_card')">
-          <span style="font-size:1.5rem">🏧</span>
-          <div>
-            <div style="font-weight:700;font-size:0.85rem">Débito</div>
-            <div style="font-size:0.7rem;color:var(--text3)">À vista</div>
-          </div>
-        </button>
-        <button class="pay-method-btn" id="pmb-crypto" onclick="App.selectPayMethod('crypto')">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.75rem" id="pay-methods">
+        <button class="pay-method-btn active" id="pmb-crypto" onclick="App.selectPayMethod('crypto')">
           <span style="font-size:1.5rem">₿</span>
           <div>
-            <div style="font-weight:700;font-size:0.85rem">Crypto</div>
-            <div style="font-size:0.7rem;color:var(--text3)">BTC, ETH…</div>
+            <div style="font-weight:700;font-size:0.85rem">Bitcoin</div>
+            <div style="font-size:0.7rem;color:var(--text3)">BTC</div>
           </div>
         </button>
+        <button class="pay-method-btn" id="pmb-eth" onclick="App.selectPayMethod('eth')">
+          <span style="font-size:1.5rem">Ξ</span>
+          <div>
+            <div style="font-weight:700;font-size:0.85rem">Ethereum</div>
+            <div style="font-size:0.7rem;color:var(--text3)">ETH</div>
+          </div>
+        </button>
+        <button class="pay-method-btn" id="pmb-usdt" onclick="App.selectPayMethod('usdt')">
+          <span style="font-size:1.5rem">💵</span>
+          <div>
+            <div style="font-weight:700;font-size:0.85rem">USDT</div>
+            <div style="font-size:0.7rem;color:var(--text3)">Stablecoin</div>
+          </div>
+        </button>
+      </div>
+      <div style="margin-top:0.6rem;font-size:0.75rem;color:var(--text3);text-align:center">
+        Mais de 150 criptomoedas disponíveis no checkout →
       </div>
     </div>
 
     <div style="font-size:0.78rem;color:var(--text3);text-align:center;margin-bottom:1.25rem">
-      🔒 Pagamento seguro via <strong>NOWPayments</strong> · Convertido automaticamente para USDT
+      🔒 Pagamento 100% crypto via <strong>NOWPayments</strong> · +150 moedas disponíveis
     </div>
 
     <button class="btn btn-full btn-primary" onclick="App.confirmPayment()" id="btn-confirm-pay">

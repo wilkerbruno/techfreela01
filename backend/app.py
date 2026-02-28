@@ -73,10 +73,8 @@ app.secret_key = os.environ.get("SECRET_KEY", "techfreela-dev-secret-2025-xk9m")
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 if HAS_CORS:
-    CORS(app, supports_credentials=True, origins=[
-        "http://localhost:5000", "http://127.0.0.1:5000",
-        "http://localhost:5500", "http://127.0.0.1:5500",
-    ])
+    # Em produção, permitir qualquer origem (o proxy do Easypanel cuida da segurança)
+    CORS(app, supports_credentials=True, origins="*")
 
 # ============================================================
 # DATABASE
@@ -524,8 +522,9 @@ def create_payment():
     }
 
     if wallet:
-        payload["payout_address"] = wallet
-        payload["payout_currency"] = currency
+        # payout_address só é aceito em /payment, não em /invoice
+        # A carteira de destino é configurada no painel da NOWPayments
+        pass  # wallet salva no admin apenas para referência
 
     try:
         resp = http_requests.post(
@@ -536,7 +535,22 @@ def create_payment():
         )
         resp_data = resp.json()
         if not resp.ok:
-            return jsonify({"error": resp_data.get("message", "Erro ao criar pagamento.")}), 502
+            sandbox = cfg.get("nowpayments_sandbox", "true").lower() == "true"
+            env_label = "Sandbox 🧪" if sandbox else "Produção 🚀"
+            raw_msg = resp_data.get("message", resp_data.get("error", "Erro desconhecido"))
+
+            # Mensagem amigável dependendo do erro
+            if resp.status_code in (401, 403) or "api key" in str(raw_msg).lower() or "invalid" in str(raw_msg).lower():
+                friendly = (f"API Key inválida para o ambiente {env_label}. "
+                            f"Chaves de Sandbox e Produção são diferentes — "
+                            f"verifique o ambiente nas configurações do admin.")
+            elif resp.status_code == 422:
+                friendly = f"Dados inválidos: {raw_msg}. Verifique a moeda configurada."
+            else:
+                friendly = f"Erro NOWPayments ({resp.status_code}): {raw_msg}"
+
+            print(f"[NOWPayments ERROR] status={resp.status_code} url={base_url}/invoice raw={raw_msg}")
+            return jsonify({"error": friendly, "detail": raw_msg}), 502
     except Exception as e:
         return jsonify({"error": f"Falha de comunicação com gateway: {str(e)}"}), 502
 
@@ -716,10 +730,17 @@ def admin_set_config():
 @app.route("/api/admin/config/raw", methods=["GET"])
 @require_admin
 def admin_get_config_raw():
-    """Returns unmasked config — used internally for test connection."""
+    """Returns config with partial masking — used for form pre-fill and diagnostics."""
     db  = get_db()
     cfg = get_admin_config(db)
-    return jsonify({"config": cfg})
+    # Mostra os primeiros 6 e últimos 4 chars da API key para confirmar qual está salva
+    safe = dict(cfg)
+    for secret_key in ("nowpayments_api_key", "nowpayments_ipn_secret"):
+        val = safe.get(secret_key, "")
+        if val:
+            safe[secret_key + "_preview"] = val[:6] + "****" + val[-4:] if len(val) > 10 else "****"
+            safe[secret_key + "_len"]     = len(val)
+    return jsonify({"config": safe})
 
 
 @app.route("/api/admin/stats", methods=["GET"])
@@ -755,21 +776,61 @@ def admin_payments():
 @app.route("/api/admin/test-nowpayments", methods=["POST"])
 @require_admin
 def admin_test_nowpayments():
-    """Test NOWPayments API key connectivity."""
+    """Test NOWPayments API key using an authenticated endpoint (/currencies)."""
     db  = get_db()
     cfg = get_admin_config(db)
     api_key  = cfg.get("nowpayments_api_key", "")
+    sandbox  = cfg.get("nowpayments_sandbox", "true").lower() == "true"
+    base_url = NOWPAYMENTS_SANDBOX_API if sandbox else NOWPAYMENTS_API
+    env_label = "Sandbox 🧪" if sandbox else "Produção 🚀"
+
     if not api_key:
         return jsonify({"ok": False, "error": "API Key não configurada."}), 400
-    base_url = get_nowpayments_base(db)
+
+    # Primeiro testa se o serviço está online (sem auth)
     try:
-        resp = http_requests.get(
-            f"{base_url}/status",
+        status_resp = http_requests.get(f"{base_url}/status", timeout=10)
+        if not status_resp.ok:
+            return jsonify({"ok": False, "error": f"Serviço NOWPayments offline ({base_url})"}), 502
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Não foi possível alcançar NOWPayments: {str(e)}"}), 502
+
+    # Agora valida a API Key com endpoint autenticado (/currencies requer auth)
+    try:
+        auth_resp = http_requests.get(
+            f"{base_url}/currencies",
             headers=nowpayments_headers(api_key),
             timeout=10
         )
-        data = resp.json()
-        return jsonify({"ok": resp.ok, "message": data.get("message", str(data))})
+        auth_data = auth_resp.json()
+
+        if auth_resp.status_code == 401 or auth_resp.status_code == 403:
+            msg = auth_data.get("message", auth_data.get("error", "Chave inválida"))
+            tip = "sandbox" if not sandbox else "produção"
+            return jsonify({
+                "ok": False,
+                "error": f"API Key inválida para {env_label}. Verifique se está usando a chave do ambiente correto.",
+                "detail": msg,
+                "tip": f"Chaves de Sandbox e Produção são DIFERENTES na NOWPayments. Certifique-se de usar a chave de {env_label}.",
+                "endpoint": base_url
+            }), 200  # 200 para o frontend mostrar a mensagem
+
+        if not auth_resp.ok:
+            return jsonify({
+                "ok": False,
+                "error": f"Erro {auth_resp.status_code}: {auth_data.get('message','Erro desconhecido')}",
+                "endpoint": base_url
+            }), 200
+
+        # Sucesso — mostra quantas moedas estão disponíveis
+        currencies = auth_data.get("currencies", [])
+        count = len(currencies) if isinstance(currencies, list) else "?"
+        return jsonify({
+            "ok": True,
+            "message": f"✅ API Key válida! Ambiente: {env_label} | {count} moedas disponíveis",
+            "endpoint": base_url
+        })
+
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 502
 
