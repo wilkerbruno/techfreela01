@@ -22,17 +22,24 @@ const App = (() => {
   const goHome = () => UI.showPage("home");
 
   const navigate = (page) => {
-    if (["profile","post-job"].includes(page) && !State.isLoggedIn()) {
+    const user    = State.getUser();
+    const isAdmin = !!user?.is_admin;
+
+    if (["profile","post-job","my-applications","company"].includes(page) && !State.isLoggedIn()) {
       UI.toastWarn("Faça login para continuar."); UI.openModal("login-modal"); return;
     }
-    if (page === "admin" && !State.isAdmin()) {
-      UI.toastWarn("Acesso negado."); return;
-    }
+    if (page === "admin"    && !isAdmin) { UI.toastWarn("Acesso negado."); return; }
+    if (page === "post-job" && !isAdmin && user?.type !== "company") { UI.toastWarn("Apenas empresas podem publicar vagas."); return; }
+    if (page === "company"  && !isAdmin && user?.type !== "company") { UI.toastWarn("Acesso exclusivo para empresas."); return; }
+
     UI.showPage(page);
-    if (page === "jobs")     renderJobBoard();
-    if (page === "profile")  renderProfilePage();
-    if (page === "post-job") renderPostJobCreditsInfo();
-    if (page === "admin")    loadAdminPage();
+    closeMobileMenu();
+    if (page === "jobs")            renderJobBoard();
+    if (page === "profile")         renderProfilePage();
+    if (page === "post-job")        renderPostJobCreditsInfo();
+    if (page === "admin")           loadAdminPage();
+    if (page === "company")         loadCompanyPanel();
+    if (page === "my-applications") loadMyApplications();
   };
 
   const renderJobBoard = async () => {
@@ -151,9 +158,8 @@ const App = (() => {
     const pkgMap = { 50: "starter", 150: "pro", 400: "business" };
     const pkg = DB.creditPackages.find(x => x.credits === amount);
     _payState.packageId = pkgMap[amount];
-    _payState.method    = "pix";
+    _payState.method    = "mercado_pago";
 
-    // Populate modal
     UI.setHtml("pay-pkg-name", `${amount} créditos`);
     UI.setHtml("pay-pkg-label", pkg ? pkg.label : "Pacote");
     UI.setHtml("pay-pkg-price", `R$ ${pkg ? pkg.price.toFixed(2).replace(".",",") : "—"}`);
@@ -162,18 +168,10 @@ const App = (() => {
     document.getElementById("btn-confirm-pay").disabled = false;
     document.getElementById("btn-confirm-pay").textContent = "⚡ Ir para Pagamento";
 
-    // Reset method selection
-    selectPayMethod("pix");
     UI.openModal("payment-modal");
   };
 
-  const selectPayMethod = (method) => {
-    _payState.method = method;
-    ["pix","credit_card","debit_card","crypto"].forEach(m => {
-      const btn = document.getElementById("pmb-" + m);
-      if (btn) btn.classList.toggle("active", m === method);
-    });
-  };
+  const selectPayMethod = (method) => { _payState.method = method; };
 
   const confirmPayment = async () => {
     const btn = document.getElementById("btn-confirm-pay");
@@ -250,6 +248,16 @@ const App = (() => {
   // ---- ADMIN ----
   let _adminTab = "config";
 
+
+  const adminUpdateEnv = () => {
+    const sandbox = document.querySelector('input[name="adm-sandbox-radio"]:checked')?.value || "true";
+    UI.setVal("adm-sandbox", sandbox);
+    const sl = document.getElementById("env-sandbox-label");
+    const pl = document.getElementById("env-prod-label");
+    if (sl) { sl.style.border = sandbox==="true" ? "2px solid var(--accent)" : "1.5px solid var(--border2)"; sl.style.background = sandbox==="true" ? "rgba(99,102,241,0.08)" : ""; }
+    if (pl) { pl.style.border = sandbox==="false" ? "2px solid var(--accent)" : "1.5px solid var(--border2)"; pl.style.background = sandbox==="false" ? "rgba(99,102,241,0.08)" : ""; }
+  };
+
   const adminTab = (tab) => {
     _adminTab = tab;
     ["config","payments"].forEach(t => {
@@ -262,41 +270,43 @@ const App = (() => {
   };
 
   const loadAdminPage = async () => {
-    // Load stats
     try {
       const s = await GET("/api/admin/stats");
       UI.setText("adm-stat-users",    s.users);
       UI.setText("adm-stat-jobs",     s.active_jobs);
       UI.setText("adm-stat-payments", s.finished_payments);
     } catch {}
-    // Load config
     try {
       const c = await GET("/api/admin/config/raw");
       const cfg = c.config || {};
-      UI.setVal("adm-api-key",    ""); // Never pre-fill secrets — force re-entry
-      UI.setVal("adm-ipn-secret", "");
-      UI.setVal("adm-wallet",     cfg.receiving_wallet    || "");
-      UI.setVal("adm-currency",   cfg.receiving_currency  || "usdttrc20");
-      UI.setVal("adm-sandbox",    cfg.nowpayments_sandbox || "true");
+      UI.setVal("adm-mp-access-token", ""); // Never pre-fill secrets
+      UI.setVal("adm-mp-public-key",   cfg.mp_public_key || "");
+      const sandbox = cfg.mp_sandbox || "true";
+      UI.setVal("adm-sandbox", sandbox);
+      const sbRadio = document.getElementById(sandbox === "true" ? "radio-sandbox" : "radio-prod");
+      if (sbRadio) sbRadio.checked = true;
+      adminUpdateEnv();
+      // Show preview
+      const prevEl = document.getElementById("adm-mp-at-preview");
+      if (prevEl && cfg.mp_access_token_preview) {
+        prevEl.textContent = `Token salvo: ${cfg.mp_access_token_preview} (${cfg.mp_access_token_len} chars)`;
+      }
     } catch {}
   };
 
   const adminSaveConfig = async () => {
-    const apiKey    = UI.val("adm-api-key");
-    const ipnSecret = UI.val("adm-ipn-secret");
-    const wallet    = UI.val("adm-wallet");
-    const currency  = UI.val("adm-currency");
-    const sandbox   = UI.val("adm-sandbox");
+    const accessToken = UI.val("adm-mp-access-token");
+    const publicKey   = UI.val("adm-mp-public-key");
+    const sandbox     = UI.val("adm-sandbox");
 
-    const payload = { receiving_wallet: wallet, receiving_currency: currency, nowpayments_sandbox: sandbox };
-    if (apiKey)    payload.nowpayments_api_key    = apiKey;
-    if (ipnSecret) payload.nowpayments_ipn_secret = ipnSecret;
+    const payload = { mp_sandbox: sandbox };
+    if (accessToken) payload.mp_access_token = accessToken;
+    if (publicKey)   payload.mp_public_key   = publicKey;
 
     try {
       const r = await POST("/api/admin/config", payload);
       UI.toastSuccess(r.message || "Configurações salvas!");
-      // Clear secret fields after save
-      UI.setVal("adm-api-key", ""); UI.setVal("adm-ipn-secret", "");
+      UI.setVal("adm-mp-access-token", "");
     } catch (err) {
       UI.toastError(err.message || "Erro ao salvar.");
     }
@@ -304,9 +314,9 @@ const App = (() => {
 
   const adminTestConnection = async () => {
     try {
-      const r = await POST("/api/admin/test-nowpayments", {});
-      if (r.ok) UI.toastSuccess(`✅ Conexão OK: ${r.message}`);
-      else       UI.toastError(`❌ Falha: ${r.error || r.message}`);
+      const r = await POST("/api/admin/test-mercadopago", {});
+      if (r.ok) UI.toastSuccess(r.message);
+      else       UI.toastError(`❌ ${r.error || r.message}`);
     } catch (err) {
       UI.toastError(err.message || "Erro ao testar.");
     }
@@ -351,10 +361,14 @@ const App = (() => {
     const sc=["tag-blue","tag-green","tag-purple","tag-orange","tag-pink"];
     const se=document.getElementById("profile-tags");
     if (se&&user.skills?.length) se.innerHTML=user.skills.map((s,i)=>`<span class="tag ${sc[i%sc.length]}">${UI.esc(s)}</span>`).join("");
+    // Show "Minhas Vagas" button only for companies
+    const myJobsBtn = document.getElementById("btn-my-jobs");
+    if (myJobsBtn) myJobsBtn.style.display = user.type === "company" ? "" : "none";
     try {
       const data = await GET("/api/profile");
       renderExpFromData(data.experiences||[]); renderPortFromData(data.portfolio||[]); renderAppsFromData(data.applications||[]);
     } catch { renderExperienceList(); renderPortfolioGrid(); renderAppliedJobsList(); }
+    loadUnreadCount();
   };
 
   const renderExpFromData = (exps) => {
@@ -401,36 +415,709 @@ const App = (() => {
     UI.clearFields(["exp-title-input","exp-company-input","exp-loc-input","exp-start","exp-end","exp-desc-input"]); UI.closeModal("add-exp-modal"); renderExperienceList(); UI.toastSuccess("Experiência adicionada! 💼");
   };
 
-  const initEvents = () => {
-    Events.on("credits:change", (c) => { UI.setText("credits-val",c); UI.setText("profile-credits-num",c); const e=document.getElementById("pj-credits-balance"); if(e)e.textContent=c+" créditos"; });
-    Events.on("auth:change", (user) => {
-      if (user) {
-        UI.hide("nav-login-btn"); UI.hide("nav-register-btn");
-        document.getElementById("credits-display").style.display="flex";
-        document.getElementById("nav-avatar").style.display="flex";
-        UI.setText("nav-avatar",user.name.split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase());
-        UI.setText("credits-val",State.getCredits());
-        const adminBtn = document.getElementById("nav-admin-btn");
-        if (adminBtn) adminBtn.style.display = user.is_admin ? "" : "none";
-      } else {
-        document.getElementById("nav-login-btn").style.display="";
-        document.getElementById("nav-register-btn").style.display="";
-        document.getElementById("credits-display").style.display="none";
-        document.getElementById("nav-avatar").style.display="none";
-        const adminBtn = document.getElementById("nav-admin-btn");
-        if (adminBtn) adminBtn.style.display = "none";
-      }
+  // ---- MY JOBS (empresa) — redireciona para o painel ----
+  const openMyJobs = () => navigate("company");
+
+  // ---- APPLICANTS — mantida para compatibilidade retroativa ----
+  const openApplicants = (jobId, jobTitle) => {
+    navigate("company");
+    setTimeout(() => { App.viewJobApplicants(jobId, jobTitle); }, 200);
+  };
+
+  const updateApplicationStatus = async (jobId, applicationId, status) => {
+    try {
+      await PUT(`/api/jobs/${jobId}/applicants/${applicationId}/status`, { status });
+      UI.toastSuccess("Status atualizado!");
+    } catch (err) {
+      UI.toastError(err.message || "Erro ao atualizar status.");
+    }
+  };
+
+  // ---- MESSAGING ----
+  let _chatState = { applicationId: null, pollTimer: null, myId: null };
+
+  const openChat = async (applicationId, otherName) => {
+    _chatState.applicationId = applicationId;
+    _chatState.myId = State.getUser()?.id;
+    if (_chatState.pollTimer) clearInterval(_chatState.pollTimer);
+
+    document.getElementById("chat-modal-title").textContent = `💬 ${otherName}`;
+    document.getElementById("chat-modal-sub").textContent   = "";
+    document.getElementById("chat-input").value = "";
+    document.getElementById("chat-messages").innerHTML = `<div class="empty-state"><div class="loading-spinner" style="margin:0 auto"></div></div>`;
+
+    UI.openModal("chat-modal");
+    await _loadChatMessages();
+
+    // Poll for new messages every 5s
+    _chatState.pollTimer = setInterval(_loadChatMessages, 5000);
+
+    // Stop polling when modal closes
+    document.getElementById("chat-modal").addEventListener("click", function handler(e) {
+      if (e.target === this) { clearInterval(_chatState.pollTimer); this.removeEventListener("click", handler); }
     });
   };
 
-  const checkSession = async () => { try { const d=await GET("/api/auth/me"); State.login({...d,credits:d.credits}); } catch {} };
+  const _loadChatMessages = async () => {
+    const aid = _chatState.applicationId; if (!aid) return;
+    try {
+      const data = await GET(`/api/messages/${aid}`);
+      const msgs = data.messages || [];
+      const myId = _chatState.myId;
+
+      document.getElementById("chat-modal-sub").textContent = data.job_title ? `Vaga: ${data.job_title}` : "";
+      const container = document.getElementById("chat-messages");
+      const wasAtBottom = container.scrollHeight - container.clientHeight <= container.scrollTop + 20;
+
+      container.innerHTML = msgs.length ? msgs.map(m => {
+        const isMe = m.sender_id === myId;
+        const time = m.created_at ? new Date(m.created_at).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}) : "";
+        return `<div style="display:flex;flex-direction:column;align-items:${isMe?'flex-end':'flex-start'}">
+          <div style="max-width:78%;padding:0.6rem 0.9rem;border-radius:${isMe?'14px 14px 4px 14px':'14px 14px 14px 4px'};background:${isMe?'var(--accent)':'rgba(255,255,255,0.07)'};color:${isMe?'#fff':'var(--text1)'};font-size:0.87rem;line-height:1.45;word-break:break-word">
+            ${UI.esc(m.content)}
+          </div>
+          <div style="font-size:0.65rem;color:var(--text3);margin-top:0.2rem;padding:0 0.3rem">${time}</div>
+        </div>`;
+      }).join("") : `<div style="text-align:center;color:var(--text3);font-size:0.85rem;margin:auto">Nenhuma mensagem ainda. Diga olá! 👋</div>`;
+
+      if (wasAtBottom) container.scrollTop = container.scrollHeight;
+      // Update unread count
+      loadUnreadCount();
+    } catch { /* keep going */ }
+  };
+
+  const sendChatMessage = async () => {
+    const content = (document.getElementById("chat-input")?.value || "").trim();
+    if (!content) return;
+    document.getElementById("chat-input").value = "";
+    try {
+      await POST("/api/messages", { application_id: _chatState.applicationId, content });
+      await _loadChatMessages();
+    } catch (err) {
+      UI.toastError(err.message || "Erro ao enviar.");
+    }
+  };
+
+  const openConversations = () => { navigate("company"); setTimeout(() => companyTab("messages"), 100); };
+
+  const loadUnreadCount = async () => {
+    try {
+      const data = await GET("/api/messages/unread-count");
+      const n = data.unread || 0;
+      ["nav-unread-badge","company-unread-badge"].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (n > 0) { el.textContent = n; el.style.display = ""; }
+        else el.style.display = "none";
+      });
+    } catch {}
+  };
+
+  // ============================================================
+  // COMPANY PANEL — Painel completo para empresas
+  // ============================================================
+
+  let _cpanel = { tab:"jobs", jobs:[], allApplicants:[], currentJobId:null, currentJobTitle:"" };
+
+  const companyTab = (tab) => {
+    _cpanel.tab = tab;
+    ["jobs","applicants","messages"].forEach(t => {
+      const btn = document.getElementById("ctab-" + t);
+      const pnl = document.getElementById("cpanel-" + t);
+      if (btn) btn.classList.toggle("active", t === tab);
+      if (pnl) pnl.style.display = t === tab ? "" : "none";
+    });
+    if (tab === "jobs")       renderCompanyJobs();
+    if (tab === "applicants") _populateJobFilter();
+    if (tab === "messages")   renderCompanyConversations();
+  };
+
+  const loadCompanyPanel = async () => {
+    const user = State.getUser();
+    if (user) {
+      const nameEl = document.getElementById("company-panel-title");
+      if (nameEl) nameEl.textContent = `Vagas de ${user.name}`;
+    }
+    // Load jobs into cache
+    try {
+      const data = await GET("/api/jobs/mine");
+      _cpanel.jobs = data.jobs || [];
+    } catch { _cpanel.jobs = []; }
+    companyTab("jobs");
+    loadUnreadCount();
+  };
+
+  // ── TAB: MINHAS VAGAS ──────────────────────────────────────
+
+  const renderCompanyJobs = () => {
+    const el    = document.getElementById("company-jobs-list");
+    const count = document.getElementById("company-jobs-count");
+    const jobs  = _cpanel.jobs;
+    if (!el) return;
+
+    if (count) count.textContent = `${jobs.length} vaga(s) publicada(s)`;
+
+    if (!jobs.length) {
+      el.innerHTML = `<div class="empty-state">
+        <div class="empty-state-icon">📋</div>
+        <div class="empty-state-text">Você ainda não publicou nenhuma vaga.</div>
+        <button class="btn btn-primary" style="margin-top:1rem" onclick="App.navigate('post-job')">＋ Publicar Primeira Vaga</button>
+      </div>`;
+      return;
+    }
+
+    el.innerHTML = jobs.map(j => `
+      <div class="card" style="margin-bottom:1rem;padding:1.25rem 1.5rem" id="cjob-${j.id}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap">
+          <div style="flex:1;min-width:220px">
+            <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.3rem">
+              <span style="font-size:1.5rem">${j.logo||'🏢'}</span>
+              <div>
+                <div style="font-weight:800;font-size:1rem;color:var(--text1)">${UI.esc(j.title)}</div>
+                <div style="font-size:0.8rem;color:var(--text3)">${UI.esc(j.company)}</div>
+              </div>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-top:0.6rem">
+              <span class="tag tag-blue">${UI.esc(j.type)}</span>
+              <span class="tag tag-gray">${UI.esc(j.mode)}</span>
+              ${j.area ? `<span class="tag tag-purple">${UI.esc(j.area)}</span>` : ''}
+              <span class="tag ${j.active?'tag-green':'tag-gray'}">${j.active ? '✓ Ativa' : '⏸ Pausada'}</span>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.6rem">
+            <div style="text-align:right">
+              <div style="font-size:1.5rem;font-weight:800;color:var(--accent)">${j.applicants_count||0}</div>
+              <div style="font-size:0.72rem;color:var(--text3)">CANDIDATO(S)</div>
+            </div>
+            <div style="display:flex;gap:0.5rem;flex-wrap:wrap;justify-content:flex-end">
+              <button class="btn btn-sm btn-primary" onclick="App.viewJobApplicants(${j.id},'${UI.esc(j.title)}')">👥 Candidatos</button>
+              <button class="btn btn-sm btn-secondary" onclick="App.openEditJob(${j.id})">✏️ Editar</button>
+              <button class="btn btn-sm btn-secondary" onclick="App.toggleJob(${j.id})" id="toggle-btn-${j.id}">
+                ${j.active ? '⏸ Pausar' : '▶ Ativar'}
+              </button>
+            </div>
+          </div>
+        </div>
+        ${j.salary ? `<div style="margin-top:0.75rem;font-size:0.82rem;color:var(--text2)">💰 ${UI.esc(j.salary)}</div>` : ''}
+      </div>`).join("");
+  };
+
+  const openEditJob = (jobId) => {
+    const j = _cpanel.jobs.find(x => x.id === jobId);
+    if (!j) { UI.toastError("Vaga não encontrada."); return; }
+    document.getElementById("edit-job-id").value     = j.id;
+    document.getElementById("edit-job-modal-sub").textContent = j.title;
+    UI.setVal("ej-title",    j.title || "");
+    UI.setVal("ej-company",  j.company || "");
+    UI.setVal("ej-salary",   j.salary || "");
+    UI.setVal("ej-location", j.location || "");
+    UI.setVal("ej-area",     j.area || "");
+    UI.setVal("ej-stack",    (j.stack||[]).join(", "));
+    UI.setVal("ej-desc",     j.desc || j.description || "");
+    UI.setVal("ej-reqs",     (j.reqs||j.requirements||[]).join("\n"));
+    // Set selects
+    const typeEl = document.getElementById("ej-type"); if (typeEl) typeEl.value = j.type || "PJ";
+    const modeEl = document.getElementById("ej-mode"); if (modeEl) modeEl.value = j.mode || "Remoto";
+    const lvlEl  = document.getElementById("ej-level"); if (lvlEl) lvlEl.value  = j.level || "A combinar";
+    UI.openModal("edit-job-modal");
+  };
+
+  const saveJobEdit = async () => {
+    const jobId = parseInt(document.getElementById("edit-job-id").value);
+    if (!jobId) return;
+    const payload = {
+      title:    UI.val("ej-title"),
+      company:  UI.val("ej-company"),
+      type:     UI.val("ej-type"),
+      mode:     UI.val("ej-mode"),
+      salary:   UI.val("ej-salary"),
+      location: UI.val("ej-location"),
+      area:     UI.val("ej-area"),
+      level:    UI.val("ej-level"),
+      stack:    UI.val("ej-stack"),
+      desc:     UI.val("ej-desc"),
+      requirements: UI.val("ej-reqs"),
+    };
+    try {
+      const data = await PUT(`/api/jobs/${jobId}`, payload);
+      UI.toastSuccess("Vaga atualizada! ✅");
+      UI.closeModal("edit-job-modal");
+      // Refresh jobs
+      const r = await GET("/api/jobs/mine");
+      _cpanel.jobs = r.jobs || [];
+      renderCompanyJobs();
+      _populateJobFilter();
+    } catch (err) {
+      UI.toastError(err.message || "Erro ao salvar.");
+    }
+  };
+
+  const toggleJob = async (jobId) => {
+    try {
+      const data = await POST(`/api/jobs/${jobId}/toggle`, {});
+      UI.toastSuccess(data.message);
+      const job = _cpanel.jobs.find(x => x.id === jobId);
+      if (job) job.active = data.active;
+      renderCompanyJobs();
+    } catch (err) {
+      UI.toastError(err.message || "Erro ao atualizar vaga.");
+    }
+  };
+
+  // ── TAB: CANDIDATOS ────────────────────────────────────────
+
+  const _populateJobFilter = () => {
+    const sel = document.getElementById("applicant-job-filter");
+    if (!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = `<option value="">— Selecione uma vaga —</option>` +
+      _cpanel.jobs.map(j => `<option value="${j.id}" ${j.id==prev?'selected':''}>${UI.esc(j.title)} (${j.applicants_count||0} cand.)</option>`).join("");
+    if (prev && _cpanel.currentJobId == prev) loadApplicantsForJob(prev);
+  };
+
+  const viewJobApplicants = (jobId, jobTitle) => {
+    companyTab("applicants");
+    setTimeout(() => loadApplicantsForJob(jobId), 50);
+    const sel = document.getElementById("applicant-job-filter");
+    if (sel) sel.value = jobId;
+  };
+
+  const loadApplicantsForJob = async (jobId) => {
+    if (!jobId) {
+      document.getElementById("company-applicants-list").innerHTML = `<div class="empty-state"><div class="empty-state-icon">👥</div><div class="empty-state-text">Selecione uma vaga para ver os candidatos.</div></div>`;
+      document.getElementById("applicants-stats-bar").style.display = "none";
+      document.getElementById("applicants-filter-bar").style.display = "none";
+      return;
+    }
+    _cpanel.currentJobId = jobId;
+    const el = document.getElementById("company-applicants-list");
+    el.innerHTML = `<div class="empty-state"><div class="loading-spinner" style="margin:0 auto"></div></div>`;
+    document.getElementById("applicants-stats-bar").style.display = "none";
+    document.getElementById("applicants-filter-bar").style.display = "";
+
+    try {
+      const data = await GET(`/api/jobs/${jobId}/applicants`);
+      _cpanel.allApplicants = data.applicants || [];
+      _cpanel.currentJobTitle = data.job?.title || "";
+      _renderApplicantList(_cpanel.allApplicants);
+      _updateApplicantStats(_cpanel.allApplicants);
+      document.getElementById("applicants-stats-bar").style.display = "grid";
+    } catch (err) {
+      el.innerHTML = `<div class="empty-state"><div class="empty-state-text">Erro: ${UI.esc(err.message||"")}</div></div>`;
+    }
+  };
+
+  const _updateApplicantStats = (list) => {
+    const counts = { total: list.length, pending:0, accepted:0, rejected:0 };
+    list.forEach(a => { if (a.status in counts) counts[a.status]++; });
+    UI.setText("astat-total",    counts.total);
+    UI.setText("astat-pending",  list.filter(a=>a.status==="pending"||a.status==="viewed").length);
+    UI.setText("astat-accepted", list.filter(a=>a.status==="accepted").length);
+    UI.setText("astat-rejected", list.filter(a=>a.status==="rejected").length);
+  };
+
+  const filterApplicants = () => {
+    const search = (document.getElementById("applicant-search")?.value || "").toLowerCase();
+    const status = document.getElementById("applicant-status-filter")?.value || "";
+    const filtered = _cpanel.allApplicants.filter(a => {
+      const c = a.candidate;
+      const matchSearch = !search || c.name.toLowerCase().includes(search) || (c.role||"").toLowerCase().includes(search) || (c.skills||[]).join(" ").toLowerCase().includes(search);
+      const matchStatus = !status || a.status === status;
+      return matchSearch && matchStatus;
+    });
+    _renderApplicantList(filtered);
+  };
+
+  const _renderApplicantList = (applicants) => {
+    const el = document.getElementById("company-applicants-list");
+    if (!el) return;
+    if (!applicants.length) {
+      el.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🔍</div><div class="empty-state-text">Nenhum candidato encontrado.</div></div>`;
+      return;
+    }
+    const STATUS_COLORS = { pending:"tag-gray", viewed:"tag-blue", accepted:"tag-green", rejected:"tag-orange" };
+    const STATUS_LABELS = { pending:"⏳ Pendente", viewed:"👁️ Visualizado", accepted:"✅ Aprovado", rejected:"❌ Rejeitado" };
+
+    el.innerHTML = applicants.map(a => {
+      const c = a.candidate;
+      const initials = c.name.split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase();
+      const skills   = (c.skills||[]).slice(0,6).map(s=>`<span class="tag tag-gray" style="font-size:0.7rem">${UI.esc(s)}</span>`).join("");
+      return `
+      <div class="card card-hover" style="margin-bottom:0.85rem;padding:1.25rem 1.5rem;cursor:pointer" onclick="App.openCandidateProfile(${a.application_id})">
+        <div style="display:flex;align-items:flex-start;gap:1rem;flex-wrap:wrap">
+          <!-- Avatar -->
+          <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#8b5cf6);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1rem;color:#000;flex-shrink:0">${initials}</div>
+          <!-- Info -->
+          <div style="flex:1;min-width:180px">
+            <div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;margin-bottom:0.2rem">
+              <span style="font-weight:700;font-size:0.97rem;color:var(--text1)">${UI.esc(c.name)}</span>
+              <span class="tag ${STATUS_COLORS[a.status]||'tag-gray'}" style="font-size:0.7rem">${STATUS_LABELS[a.status]||a.status}</span>
+              ${a.unread_messages>0?`<span class="tag tag-orange" style="font-size:0.7rem">💬 ${a.unread_messages} nova(s)</span>`:''}
+            </div>
+            <div style="font-size:0.82rem;color:var(--accent);margin-bottom:0.5rem">${UI.esc(c.role||'Desenvolvedor')}</div>
+            ${c.bio?`<div style="font-size:0.8rem;color:var(--text3);line-height:1.4;margin-bottom:0.5rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${UI.esc(c.bio)}</div>`:''}
+            ${skills?`<div style="display:flex;flex-wrap:wrap;gap:0.3rem">${skills}</div>`:''}
+          </div>
+          <!-- Actions -->
+          <div style="display:flex;flex-direction:column;gap:0.5rem;align-items:flex-end" onclick="event.stopPropagation()">
+            <button class="btn btn-sm btn-primary" onclick="App.openCandidateProfile(${a.application_id})">👁️ Ver Perfil</button>
+            <button class="btn btn-sm btn-secondary" onclick="App.openChat(${a.application_id},'${UI.esc(c.name)}')">
+              💬 Mensagem${a.unread_messages>0?` (${a.unread_messages})`:''}
+            </button>
+            <select class="form-select" style="font-size:0.75rem;padding:0.3rem 0.5rem" onchange="App.updateApplicationStatus(${_cpanel.currentJobId},${a.application_id},this.value)" onclick="event.stopPropagation()">
+              <option value="pending"  ${a.status==='pending'?'selected':''}>⏳ Pendente</option>
+              <option value="viewed"   ${a.status==='viewed'?'selected':''}>👁️ Visualizado</option>
+              <option value="accepted" ${a.status==='accepted'?'selected':''}>✅ Aprovado</option>
+              <option value="rejected" ${a.status==='rejected'?'selected':''}>❌ Rejeitado</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-top:0.6rem;padding-top:0.6rem;border-top:1px solid var(--border);display:flex;gap:0.75rem;align-items:center">
+          <span style="font-size:0.72rem;color:var(--text3)">📅 ${a.applied_at ? new Date(a.applied_at).toLocaleDateString("pt-BR") : '—'}</span>
+          ${c.linkedin?`<a href="${UI.esc(c.linkedin)}" target="_blank" onclick="event.stopPropagation()" style="font-size:0.72rem;color:var(--accent)">🔗 LinkedIn</a>`:''}
+          ${c.github?`<a href="${UI.esc(c.github)}" target="_blank" onclick="event.stopPropagation()" style="font-size:0.72rem;color:var(--accent)">🐙 GitHub</a>`:''}
+        </div>
+      </div>`;
+    }).join("");
+  };
+
+  // ── CANDIDATE PROFILE MODAL ────────────────────────────────
+
+  let _profileCtx = { applicationId: null, jobId: null };
+
+  const openCandidateProfile = (applicationId) => {
+    const a = _cpanel.allApplicants.find(x => x.application_id === applicationId);
+    if (!a) { UI.toastError("Candidato não encontrado."); return; }
+    _profileCtx = { applicationId, jobId: _cpanel.currentJobId };
+    const c = a.candidate;
+
+    const initials = c.name.split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase();
+    UI.setHtml("cpm-avatar", initials);
+    UI.setText("cpm-name",   c.name);
+    UI.setText("cpm-role",   c.role || "Desenvolvedor");
+
+    // Links
+    const linksEl = document.getElementById("cpm-links");
+    if (linksEl) {
+      linksEl.innerHTML = [
+        c.email    ? `<a href="mailto:${UI.esc(c.email)}" style="font-size:0.78rem;color:var(--text3);text-decoration:none">✉️ ${UI.esc(c.email)}</a>` : '',
+        c.linkedin ? `<a href="${UI.esc(c.linkedin)}" target="_blank" style="font-size:0.78rem;color:var(--accent)">🔗 LinkedIn</a>` : '',
+        c.github   ? `<a href="${UI.esc(c.github)}"   target="_blank" style="font-size:0.78rem;color:var(--accent)">🐙 GitHub</a>`  : '',
+      ].filter(Boolean).join(" <span style='color:var(--border2)'>·</span> ");
+    }
+
+    // Bio
+    const bioEl = document.getElementById("cpm-bio");
+    if (bioEl) bioEl.textContent = c.bio || "Sem bio informada.";
+
+    // Skills
+    const sc = ["tag-blue","tag-green","tag-purple","tag-orange","tag-pink"];
+    const skillsEl = document.getElementById("cpm-skills");
+    if (skillsEl) skillsEl.innerHTML = (c.skills||[]).map((s,i)=>`<span class="tag ${sc[i%sc.length]}">${UI.esc(s)}</span>`).join("") || '<span style="color:var(--text3);font-size:0.82rem">Sem habilidades informadas.</span>';
+
+    // Cover note
+    const coverBlock = document.getElementById("cpm-cover-block");
+    const coverEl    = document.getElementById("cpm-cover");
+    if (coverBlock && coverEl) {
+      if (a.cover_note) { coverEl.textContent = a.cover_note; coverBlock.style.display = ""; }
+      else coverBlock.style.display = "none";
+    }
+
+    // Experiences
+    const expEl = document.getElementById("cpm-experiences");
+    if (expEl) {
+      expEl.innerHTML = (c.experiences||[]).length
+        ? (c.experiences||[]).map(e=>`
+          <div style="border-left:3px solid var(--accent);padding-left:1rem;margin-bottom:0.85rem">
+            <div style="font-weight:700;color:var(--text1);font-size:0.88rem">${UI.esc(e.title)}</div>
+            <div style="font-size:0.8rem;color:var(--accent);margin-bottom:0.25rem">${UI.esc(e.company)}${e.location?' · '+UI.esc(e.location):''}</div>
+            <div style="font-size:0.75rem;color:var(--text3);margin-bottom:0.25rem">${UI.esc(e.start||'')} → ${UI.esc(e.end||'Atual')}</div>
+            ${e.desc?`<div style="font-size:0.82rem;color:var(--text2);line-height:1.5">${UI.esc(e.desc)}</div>`:''}
+          </div>`).join("")
+        : '<p style="color:var(--text3);font-size:0.82rem">Sem experiências informadas.</p>';
+    }
+
+    // Portfolio
+    const portEl = document.getElementById("cpm-portfolio");
+    if (portEl) {
+      portEl.innerHTML = (c.portfolio||[]).length
+        ? (c.portfolio||[]).map(p=>`
+          <div class="portfolio-item">
+            <div class="portfolio-emoji">${p.emoji||'💡'}</div>
+            <div class="portfolio-name">${UI.esc(p.name)}</div>
+            ${p.stack?`<div class="portfolio-stack">${UI.esc(p.stack)}</div>`:''}
+            ${p.desc?`<div style="font-size:0.75rem;color:var(--text3);margin-top:0.25rem">${UI.esc(p.desc)}</div>`:''}
+            ${p.link?`<a href="${UI.esc(p.link)}" target="_blank" style="font-size:0.75rem;color:var(--accent);margin-top:0.3rem;display:block">🔗 Ver projeto</a>`:''}
+          </div>`).join("")
+        : '<p style="color:var(--text3);font-size:0.82rem">Sem projetos no portfólio.</p>';
+    }
+
+    // Status selector
+    const statusSel = document.getElementById("cpm-status-sel");
+    if (statusSel) statusSel.value = a.status || "pending";
+
+    // Message button
+    const msgBtn = document.getElementById("cpm-msg-btn");
+    if (msgBtn) msgBtn.onclick = () => { UI.closeModal("candidate-profile-modal"); openChat(applicationId, c.name); };
+
+    UI.openModal("candidate-profile-modal");
+    // Mark as viewed if pending
+    if (a.status === "pending") {
+      updateApplicationStatus(_cpanel.currentJobId, applicationId, "viewed").catch(()=>{});
+      a.status = "viewed";
+    }
+  };
+
+  const updateStatusFromProfile = async (status) => {
+    const { applicationId, jobId } = _profileCtx;
+    if (!applicationId) return;
+    await updateApplicationStatus(jobId, applicationId, status);
+    // Update local cache
+    const a = _cpanel.allApplicants.find(x => x.application_id === applicationId);
+    if (a) a.status = status;
+  };
+
+  // ── TAB: MENSAGENS ─────────────────────────────────────────
+
+  const renderCompanyConversations = async () => {
+    const el = document.getElementById("company-conversations-list");
+    if (!el) return;
+    el.innerHTML = `<div class="empty-state"><div class="loading-spinner" style="margin:0 auto"></div></div>`;
+    try {
+      const data  = await GET("/api/messages/conversations");
+      const convs = data.conversations || [];
+      if (!convs.length) {
+        el.innerHTML = `<div class="empty-state"><div class="empty-state-icon">💬</div><div class="empty-state-text">Nenhuma conversa ainda.<br><small style="color:var(--text3)">Inicie uma conversa acessando um candidato.</small></div></div>`;
+        return;
+      }
+      el.innerHTML = convs.map(c => {
+        const other = c.other_user || {};
+        const last  = c.last_message;
+        const time  = last?.created_at ? _formatMsgTime(last.created_at) : "";
+        const initials = (other.name||"?").split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase();
+        return `
+        <div class="card card-hover" style="margin-bottom:0.6rem;padding:1rem 1.25rem;cursor:pointer" onclick="App.openChat(${c.application_id},'${UI.esc(other.name||'?')}')">
+          <div style="display:flex;align-items:center;gap:0.85rem">
+            <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#8b5cf6);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.85rem;color:#000;flex-shrink:0">${initials}</div>
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.15rem">
+                <div style="font-weight:700;color:var(--text1);font-size:0.9rem">${UI.esc(other.name||'?')}</div>
+                <div style="font-size:0.7rem;color:var(--text3)">${time}</div>
+              </div>
+              <div style="font-size:0.75rem;color:var(--text3);margin-bottom:0.15rem">📋 ${UI.esc(c.job_title||'')}</div>
+              ${last?`<div style="font-size:0.82rem;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${UI.esc(last.content||'')}</div>`:''}
+            </div>
+            ${c.unread>0?`<span style="background:var(--accent);color:#000;border-radius:99px;padding:2px 8px;font-size:0.7rem;font-weight:800;flex-shrink:0">${c.unread}</span>`:''}
+          </div>
+        </div>`;
+      }).join("");
+    } catch (err) {
+      el.innerHTML = `<div class="empty-state"><div class="empty-state-text">Erro ao carregar: ${UI.esc(err.message||"")}</div></div>`;
+    }
+  };
+
+  const _formatMsgTime = (isoStr) => {
+    const d = new Date(isoStr);
+    const now = new Date();
+    const diffMs = now - d;
+    const diffH  = diffMs / 3600000;
+    if (diffH < 1)  return "Agora";
+    if (diffH < 24) return `${Math.floor(diffH)}h`;
+    if (diffH < 48) return "Ontem";
+    return d.toLocaleDateString("pt-BR");
+  };
+
+  // ── initEvents & checkSession ──────────────────────────────
+
+  // ============================================================
+  // MY APPLICATIONS — página de candidaturas para devs
+  // ============================================================
+  let _myApps = [];
+
+  const loadMyApplications = async () => {
+    const el = document.getElementById("my-applications-list");
+    if (el) el.innerHTML = `<div class="empty-state"><div class="loading-spinner" style="margin:0 auto"></div></div>`;
+    try {
+      const data = await GET("/api/profile");
+      _myApps = data.applications || [];
+      _renderMyApplications(_myApps);
+      // stats
+      UI.setText("myapp-stat-total",    _myApps.length);
+      UI.setText("myapp-stat-pending",  _myApps.filter(a=>a.status==="pending"||a.status==="viewed").length);
+      UI.setText("myapp-stat-accepted", _myApps.filter(a=>a.status==="accepted").length);
+      UI.setText("myapp-stat-rejected", _myApps.filter(a=>a.status==="rejected").length);
+    } catch (err) {
+      if (el) el.innerHTML = `<div class="empty-state"><div class="empty-state-text">Erro: ${UI.esc(err.message||"")}</div></div>`;
+    }
+  };
+
+  const filterMyApplications = (status) => {
+    document.querySelectorAll(".myapp-filter").forEach(b => b.classList.toggle("active", b.dataset.status === status));
+    const filtered = status ? _myApps.filter(a => a.status === status) : _myApps;
+    _renderMyApplications(filtered);
+  };
+
+  const _renderMyApplications = (apps) => {
+    const el = document.getElementById("my-applications-list");
+    if (!el) return;
+    if (!apps.length) {
+      el.innerHTML = `<div class="empty-state">
+        <div class="empty-state-icon">📨</div>
+        <div class="empty-state-text">Nenhuma candidatura encontrada.</div>
+        <button class="btn btn-primary" style="margin-top:1rem" onclick="App.navigate('jobs')">🔍 Buscar Vagas</button>
+      </div>`;
+      return;
+    }
+    const STATUS_COLORS = { pending:"tag-gray", viewed:"tag-blue", accepted:"tag-green", rejected:"tag-orange" };
+    const STATUS_LABELS = { pending:"⏳ Pendente", viewed:"👁️ Visualizada", accepted:"✅ Aprovada", rejected:"❌ Rejeitada" };
+    el.innerHTML = apps.map(a => `
+      <div class="card card-hover" style="margin-bottom:0.85rem;padding:1.25rem 1.5rem">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap">
+          <div style="flex:1;min-width:180px">
+            <div style="font-weight:800;font-size:0.97rem;color:var(--text1);margin-bottom:0.2rem">${UI.esc(a.job_title||"Vaga")}</div>
+            <div style="font-size:0.82rem;color:var(--text3);margin-bottom:0.6rem">${UI.esc(a.job_company||"")}${a.job_type?" · "+UI.esc(a.job_type):""}</div>
+            <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
+              <span class="tag ${STATUS_COLORS[a.status]||'tag-gray'}" style="font-size:0.75rem">${STATUS_LABELS[a.status]||a.status}</span>
+              <span style="font-size:0.72rem;color:var(--text3)">📅 ${a.applied_at ? new Date(a.applied_at).toLocaleDateString("pt-BR") : "—"}</span>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:0.4rem;align-items:flex-end">
+            <button class="btn btn-sm btn-secondary" onclick="App.viewJob(${a.job_id})">👁️ Ver Vaga</button>
+          </div>
+        </div>
+        ${a.cover_note?`<div style="margin-top:0.75rem;padding:0.6rem 0.9rem;background:rgba(255,255,255,0.03);border:1px solid var(--border2);border-radius:8px;font-size:0.8rem;color:var(--text3);font-style:italic">"${UI.esc(a.cover_note)}"</div>`:""}
+      </div>`).join("");
+  };
+
+  // ── Mobile hamburger menu ──────────────────────────────────
+  const toggleMobileMenu = () => {
+    const links   = document.getElementById("nav-links");
+    const burger  = document.getElementById("nav-hamburger");
+    const overlay = document.getElementById("mobile-overlay");
+    const isOpen  = links?.classList.contains("open");
+    if (isOpen) {
+      links?.classList.remove("open");
+      burger?.classList.remove("open");
+      overlay?.classList.remove("open");
+      document.body.style.overflow = "";
+    } else {
+      links?.classList.add("open");
+      burger?.classList.add("open");
+      overlay?.classList.add("open");
+      document.body.style.overflow = "hidden";
+    }
+  };
+
+  const closeMobileMenu = () => {
+    document.getElementById("nav-links")?.classList.remove("open");
+    document.getElementById("nav-hamburger")?.classList.remove("open");
+    document.getElementById("mobile-overlay")?.classList.remove("open");
+    document.body.style.overflow = "";
+  };
+
+  // ── User dropdown menu ─────────────────────────────────────
+  const toggleUserMenu = () => {
+    const dd = document.getElementById("user-dropdown");
+    if (!dd) return;
+    dd.style.display = dd.style.display === "none" ? "" : "none";
+    // Refresh credits in dropdown
+    const credEl = document.getElementById("ud-credits");
+    if (credEl) credEl.textContent = `💎 ${State.getCredits()} créditos`;
+  };
+
+  const closeUserMenu = () => {
+    const dd = document.getElementById("user-dropdown");
+    if (dd) dd.style.display = "none";
+  };
+
+  const doLogout = async () => {
+    try { await POST("/api/auth/logout", {}); } catch {}
+    State.logout();
+    UI.showPage("home");
+    UI.toastSuccess("Até logo! 👋");
+  };
+
+  // ── initEvents ─────────────────────────────────────────────
+  const initEvents = () => {
+    Events.on("credits:change", (c) => {
+      UI.setText("credits-val",c);
+      UI.setText("profile-credits-num",c);
+      const e = document.getElementById("pj-credits-balance");
+      if (e) e.textContent = c+" créditos";
+    });
+    Events.on("auth:change", (user) => {
+      const el = (id) => document.getElementById(id);
+      if (user) {
+        UI.hide("nav-login-btn"); UI.hide("nav-register-btn");
+        el("nav-avatar-wrap").style.display  = "flex";
+        const initials = user.name.split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase();
+        UI.setText("nav-avatar", initials);
+        UI.setText("credits-val", State.getCredits());
+
+        // Populate dropdown info
+        if (el("ud-name"))    el("ud-name").textContent    = user.name;
+        if (el("ud-email"))   el("ud-email").textContent   = user.email || "";
+        if (el("ud-credits")) el("ud-credits").textContent = `💎 ${State.getCredits()} créditos`;
+
+        const isCompany = user.type === "company";
+        const isAdmin   = !!user.is_admin;
+        if (el("nav-admin-btn"))        el("nav-admin-btn").style.display        = isAdmin ? "" : "none";
+        if (el("nav-company-btn"))      el("nav-company-btn").style.display      = (isCompany || isAdmin) ? "" : "none";
+        if (el("nav-post-job-btn"))     el("nav-post-job-btn").style.display     = (isCompany || isAdmin) ? "" : "none";
+        if (el("nav-applications-btn")) el("nav-applications-btn").style.display = (!isCompany || isAdmin) ? "" : "none";
+        // Dropdown buttons
+        if (el("ud-btn-company"))       el("ud-btn-company").style.display       = (isCompany || isAdmin) ? "" : "none";
+        if (el("ud-btn-applications"))  el("ud-btn-applications").style.display  = (!isCompany || isAdmin) ? "" : "none";
+        if (el("ud-btn-admin"))         el("ud-btn-admin").style.display         = isAdmin ? "" : "none";
+      } else {
+        UI.show("nav-login-btn"); UI.show("nav-register-btn");
+        if (el("nav-avatar-wrap")) el("nav-avatar-wrap").style.display = "none";
+        closeUserMenu();
+        ["nav-admin-btn","nav-company-btn","nav-post-job-btn","nav-applications-btn"].forEach(id => {
+          if (el(id)) el(id).style.display = "none";
+        });
+      }
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener("click", (e) => {
+      const wrap = document.getElementById("nav-avatar-wrap");
+      if (wrap && !wrap.contains(e.target)) closeUserMenu();
+    });
+
+    // Close mobile menu on resize to desktop
+    window.addEventListener("resize", () => {
+      if (window.innerWidth > 768) closeMobileMenu();
+    });
+  };
+
+  const checkSession = async () => {
+    try {
+      const d = await GET("/api/auth/me");
+      State.login({...d, credits: d.credits});
+      loadUnreadCount();
+      setInterval(loadUnreadCount, 30000);
+    } catch {}
+  };
 
   const init = async () => { UI.initModalOutsideClick(); initEvents(); await checkSession(); renderJobBoard(); };
 
-  return { init, navigate, goHome, filterJobs, viewJob, applyJob, postJob, renderPostJobCreditsInfo,
-           doLogin, doRegister, switchRegisterTab, buyCredits, selectPayMethod, confirmPayment,
-           openEditProfile, saveProfile, addPortfolio, addExperience, renderProfilePage,
-           adminTab, adminSaveConfig, adminTestConnection };
+  return {
+    init, navigate, goHome, filterJobs, viewJob, applyJob, postJob, renderPostJobCreditsInfo,
+    doLogin, doRegister, doLogout, switchRegisterTab, buyCredits, selectPayMethod, confirmPayment,
+    openEditProfile, saveProfile, addPortfolio, addExperience, renderProfilePage,
+    adminTab, adminSaveConfig, adminTestConnection, adminUpdateEnv,
+    openMyJobs, openApplicants, updateApplicationStatus,
+    openChat, sendChatMessage, openConversations,
+    loadMyApplications, filterMyApplications,
+    toggleUserMenu, closeUserMenu, toggleMobileMenu, closeMobileMenu,
+    // Company Panel
+    companyTab, loadCompanyPanel,
+    viewJobApplicants, loadApplicantsForJob, filterApplicants,
+    openEditJob, saveJobEdit, toggleJob,
+    openCandidateProfile, updateStatusFromProfile,
+    renderCompanyConversations,
+  };
 })();
 
 document.addEventListener("DOMContentLoaded", App.init);

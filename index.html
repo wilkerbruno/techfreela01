@@ -10,6 +10,321 @@
   <link rel="stylesheet" href="assets/css/variables.css">
   <link rel="stylesheet" href="assets/css/components.css">
   <link rel="stylesheet" href="assets/css/layout.css">
+  <style>
+    /* =====================================================
+       RESPONSIVE OVERRIDES + HAMBURGER MENU
+       ===================================================== */
+
+    /* ── Hamburger button ── */
+    .nav-hamburger {
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      gap: 5px;
+      width: 40px;
+      height: 40px;
+      padding: 8px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      z-index: 201;
+      flex-shrink: 0;
+    }
+    .nav-hamburger span {
+      display: block;
+      width: 22px;
+      height: 2px;
+      background: var(--text, #fff);
+      border-radius: 2px;
+      transition: all 0.28s ease;
+      transform-origin: center;
+    }
+    .nav-hamburger.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+    .nav-hamburger.open span:nth-child(2) { opacity: 0; transform: scaleX(0); }
+    .nav-hamburger.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+    /* ── Mobile overlay ── */
+    .mobile-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(4px);
+      z-index: 198;
+    }
+    .mobile-overlay.open { display: block; }
+
+    /* ── User dropdown menu ── */
+    .nav-avatar-wrap { position: relative; }
+
+    .user-dropdown {
+      position: absolute;
+      top: calc(100% + 10px);
+      right: 0;
+      min-width: 220px;
+      background: var(--surface2, #1a1a2e);
+      border: 1px solid var(--border2, rgba(255,255,255,0.1));
+      border-radius: 14px;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.4);
+      z-index: 9999;
+      overflow: hidden;
+      animation: dropdownIn .15s ease;
+    }
+    @keyframes dropdownIn {
+      from { opacity:0; transform:translateY(-6px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+    .user-dropdown-header { padding: 1rem 1.1rem 0.85rem; }
+    .user-dropdown-divider {
+      height: 1px;
+      background: var(--border2, rgba(255,255,255,0.08));
+      margin: 0.2rem 0;
+    }
+    .user-dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      width: 100%;
+      padding: 0.65rem 1.1rem;
+      background: none;
+      border: none;
+      color: var(--text2, #ccc);
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      text-align: left;
+      transition: background .12s, color .12s;
+      font-family: inherit;
+    }
+    .user-dropdown-item:hover { background: rgba(255,255,255,0.06); color: var(--text1, #fff); }
+    .user-dropdown-item-danger { color: #f87171 !important; }
+    .user-dropdown-item-danger:hover { background: rgba(248,113,113,0.1) !important; }
+
+    /* =====================================================
+       MOBILE — 768px
+       ===================================================== */
+    @media (max-width: 768px) {
+
+      /* Prevent horizontal scroll from hidden drawer */
+      html, body { overflow-x: hidden; }
+
+      /* Nav */
+      .nav { padding: 0 1rem; }
+      .nav-hamburger { display: flex; }
+
+      /* Nav links become a slide-in drawer from the right */
+      .nav-links {
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: min(320px, 100vw);
+        background: var(--bg3, #0e0e1a);
+        border-left: 1px solid var(--border2, rgba(255,255,255,0.1));
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.15rem;
+        padding: 0 0.75rem 1.5rem;
+        z-index: 200;
+        transform: translateX(100%);
+        transition: transform 0.3s cubic-bezier(.4,0,.2,1);
+        overflow-y: auto;
+        overflow-x: hidden;
+        box-shadow: -8px 0 32px rgba(0,0,0,0.5);
+        visibility: hidden;
+
+        height: 80dvh;
+        max-height: 80dvh;
+      }
+      .nav-links.open {
+        transform: translateX(0);
+        visibility: visible;
+      }
+
+      /* Drawer header */
+      .drawer-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 0.25rem;
+        height: 64px;
+        flex-shrink: 0;
+        position: sticky;
+        top: 0;
+        background: var(--bg3, #0e0e1a);
+        z-index: 1;
+        margin: 0 -0.75rem;
+        padding: 0 1rem;
+        border-bottom: 1px solid var(--border2, rgba(255,255,255,0.08));
+        margin-bottom: 0.5rem;
+      }
+      .drawer-close {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        background: var(--surface, rgba(255,255,255,0.06));
+        border: 1px solid var(--border, rgba(255,255,255,0.1));
+        color: var(--text2, #ccc);
+        font-size: 1rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .drawer-divider { display: none; }
+
+      /* Buttons inside drawer go full width */
+      .nav-links .btn-ghost {
+        width: 100%;
+        justify-content: flex-start;
+        padding: 0.65rem 0.85rem;
+        font-size: 0.9rem;
+        border-radius: 8px;
+      }
+      .nav-links .btn-ghost:hover { background: rgba(255,255,255,0.06); }
+
+      .nav-links .btn-primary,
+      .nav-links .btn-secondary {
+        width: 100%;
+        margin-top: 0.25rem;
+        justify-content: center;
+      }
+
+      /* Avatar wrap inside drawer */
+      .nav-avatar-wrap {
+        margin-top: 0.5rem;
+        width: 100%;
+      }
+      .nav-avatar {
+        width: 100%;
+        height: 44px;
+        border-radius: 10px;
+        font-size: 0.9rem;
+        justify-content: center;
+      }
+      /* Dropdown becomes inline inside drawer */
+      .user-dropdown {
+        position: static;
+        animation: none;
+        box-shadow: none;
+        border-radius: 10px;
+        margin-top: 0.5rem;
+        border: 1px solid var(--border, rgba(255,255,255,0.08));
+      }
+
+      /* Sections */
+      .section { padding: 2.5rem 1rem; }
+      .section-sm { padding: 1.5rem 1rem; }
+      .hero { padding: 2.5rem 1rem; min-height: auto; }
+      .hero-stats { gap: 1.5rem; margin-top: 3rem; }
+      .hero-desc { font-size: 1rem; }
+
+      /* Job cards */
+      .job-card {
+        grid-template-columns: auto 1fr;
+        gap: 0.75rem 1rem;
+      }
+      .job-meta { display: none; }
+
+      /* Post job */
+      .post-hero { padding: 1.75rem 1.25rem; }
+      .post-hero h2 { font-size: 1.5rem; }
+
+      /* Portfolio */
+      .portfolio-grid { grid-template-columns: 1fr; }
+
+      /* Cost table */
+      .cost-table-wrap { padding: 1.25rem; }
+
+      /* Modal */
+      .modal { padding: 1.5rem 1.25rem; border-radius: 18px; }
+      .modal-title { font-size: 1.2rem; }
+      .modal-wide { max-width: 100%; }
+
+      /* Profile */
+      .profile-header { flex-direction: column; align-items: stretch; }
+      .profile-grid { grid-template-columns: 1fr; }
+      .profile-credits-box { min-width: auto; }
+      .profile-actions { gap: 0.5rem; }
+      .profile-actions .btn { flex: 1; min-width: calc(50% - 0.25rem); justify-content: center; }
+
+      /* Company panel tabs */
+      .tab-switcher { flex-wrap: wrap; }
+      .tab-btn { flex: none; font-size: 0.78rem; padding: 0.5rem 0.75rem; }
+
+      /* Forms */
+      .form-row { grid-template-columns: 1fr; }
+
+      /* Toast */
+      #toast { bottom: 1rem; right: 1rem; left: 1rem; max-width: none; }
+
+      /* How grid */
+      .how-grid { grid-template-columns: 1fr; gap: 1rem; }
+
+      /* Pricing */
+      .pricing-grid { grid-template-columns: 1fr; }
+
+      /* Admin tabs */
+      #admin-tabs { flex-wrap: wrap; gap: 0.4rem; }
+      #admin-tabs .tab-btn { font-size: 0.78rem; padding: 0.45rem 0.65rem; }
+
+      /* My applications stats */
+      #myapp-stats { grid-template-columns: repeat(2, 1fr); }
+
+      /* Company applicants stats bar */
+      .how-grid#applicants-stats-bar { grid-template-columns: repeat(2, 1fr); }
+
+      /* Candidate profile modal header flex */
+      #candidate-profile-modal > .modal > div:first-of-type { flex-direction: column; }
+    }
+
+    /* =====================================================
+       SMALL MOBILE — 480px
+       ===================================================== */
+    @media (max-width: 480px) {
+      .nav-logo { font-size: 1.2rem; }
+      .hero h1  { font-size: 2rem; letter-spacing: -1px; }
+      .hero-btns { flex-direction: column; align-items: stretch; }
+
+      .section-title { font-size: 1.6rem; }
+
+      /* Job card compact */
+      .job-logo { width: 40px; height: 40px; font-size: 1.2rem; }
+      .job-info h3 { font-size: 0.92rem; }
+      .job-company { font-size: 0.78rem; }
+      .job-tags .tag { font-size: 0.68rem; }
+
+      /* Profile header */
+      .profile-avatar { width: 64px; height: 64px; font-size: 1.5rem; }
+      .profile-name   { font-size: 1.3rem; }
+      .profile-actions .btn { font-size: 0.75rem; padding: 0.4rem 0.5rem; }
+
+      /* Modal full screen on very small */
+      .modal-overlay { padding: 0; align-items: flex-end; }
+      .modal {
+        border-radius: 20px 20px 0 0;
+        max-height: 92vh;
+        width: 100%;
+      }
+
+      /* Company panel job card actions */
+      #company-jobs-list .card > div { flex-direction: column; }
+
+      /* My applications filter buttons wrap */
+      #page-my-applications .btn-sm { font-size: 0.75rem; padding: 0.35rem 0.6rem; }
+
+      /* Stats grid 2 cols */
+      #myapp-stats { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    /* =====================================================
+       TABLET — 1024px
+       ===================================================== */
+    @media (max-width: 1024px) {
+      .profile-grid { grid-template-columns: 1fr; }
+      .how-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
 </head>
 <body>
 
@@ -19,9 +334,33 @@
 <nav class="nav">
   <div class="nav-logo" onclick="App.goHome()">Tech<span>Freela</span></div>
 
+  <!-- Hamburger (mobile only) -->
+  <button class="nav-hamburger" id="nav-hamburger" onclick="App.toggleMobileMenu()" aria-label="Menu">
+    <span></span><span></span><span></span>
+  </button>
+
+  <!-- Mobile overlay -->
+  <div class="mobile-overlay" id="mobile-overlay" onclick="App.closeMobileMenu()"></div>
+
   <div class="nav-links" id="nav-links">
+    <!-- Drawer header -->
+    <div class="drawer-header">
+      <div class="nav-logo" onclick="App.goHome();App.closeMobileMenu()">Tech<span>Freela</span></div>
+      <button class="drawer-close" onclick="App.closeMobileMenu()">✕</button>
+    </div>
+    <div class="drawer-divider"></div>
     <button class="btn btn-ghost" onclick="App.navigate('jobs')">🔍 Vagas</button>
-    <button class="btn btn-ghost" onclick="App.navigate('post-job')">＋ Publicar Vaga</button>
+
+    <!-- Apenas para empresas (logadas) -->
+    <button class="btn btn-ghost" id="nav-post-job-btn" style="display:none" onclick="App.navigate('post-job')">＋ Publicar Vaga</button>
+    <button class="btn btn-ghost" id="nav-company-btn" style="display:none;position:relative" onclick="App.navigate('company')">
+      📋 Minhas Vagas
+      <span id="nav-unread-badge" style="display:none;background:var(--accent);color:#000;border-radius:99px;padding:0 5px;font-size:0.65rem;position:absolute;top:2px;right:2px;font-weight:800">0</span>
+    </button>
+
+    <!-- Apenas para devs (logados) -->
+    <button class="btn btn-ghost" id="nav-applications-btn" style="display:none" onclick="App.navigate('my-applications')">📨 Minhas Candidaturas</button>
+
     <button class="btn btn-ghost" onclick="App.navigate('pricing')">💎 Créditos</button>
 
     <!-- Logged-out state -->
@@ -29,10 +368,24 @@
     <button class="btn btn-md btn-primary" id="nav-register-btn" onclick="UI.openModal('register-modal')">Criar Conta</button>
 
     <!-- Logged-in state (hidden by default) -->
-    <div class="credits-badge badge-dot" id="credits-display" style="display:none" onclick="App.navigate('pricing')" title="Seus créditos">
-      <span id="credits-val">0</span>&nbsp;créditos
+    <div class="nav-avatar-wrap" id="nav-avatar-wrap" style="display:none;position:relative">
+      <div class="nav-avatar" id="nav-avatar" onclick="App.toggleUserMenu()" title="Minha conta">TF</div>
+      <div id="user-dropdown" class="user-dropdown" style="display:none">
+        <div class="user-dropdown-header">
+          <div id="ud-name" style="font-weight:700;color:var(--text1);font-size:0.9rem"></div>
+          <div id="ud-email" style="font-size:0.75rem;color:var(--text3);margin-top:0.1rem"></div>
+          <div id="ud-credits" style="font-size:0.72rem;color:var(--accent);margin-top:0.25rem;font-weight:600"></div>
+        </div>
+        <div class="user-dropdown-divider"></div>
+        <button class="user-dropdown-item" onclick="App.closeUserMenu();App.navigate('profile')">👤 Meu Perfil</button>
+        <button class="user-dropdown-item" id="ud-btn-applications" style="display:none" onclick="App.closeUserMenu();App.navigate('my-applications')">📨 Minhas Candidaturas</button>
+        <button class="user-dropdown-item" id="ud-btn-company" style="display:none" onclick="App.closeUserMenu();App.navigate('company')">📋 Minhas Vagas</button>
+        <button class="user-dropdown-item" onclick="App.closeUserMenu();App.navigate('pricing')">💎 Comprar Créditos</button>
+        <div class="user-dropdown-divider"></div>
+        <button class="user-dropdown-item" id="ud-btn-admin" style="display:none" onclick="App.closeUserMenu();App.navigate('admin')">⚙️ Painel Admin</button>
+        <button class="user-dropdown-item user-dropdown-item-danger" onclick="App.closeUserMenu();App.doLogout()">🚪 Sair</button>
+      </div>
     </div>
-    <div class="nav-avatar" id="nav-avatar" style="display:none" onclick="App.navigate('profile')" title="Meu perfil">TF</div>
     <button class="btn btn-sm btn-secondary" id="nav-admin-btn" style="display:none" onclick="App.navigate('admin')">⚙️ Admin</button>
   </div>
 </nav>
@@ -376,6 +729,10 @@
       <button class="btn btn-sm btn-secondary" onclick="App.openEditProfile()">✏️ Editar Perfil</button>
       <button class="btn btn-sm btn-secondary" onclick="UI.openModal('add-portfolio-modal')">+ Portfólio</button>
       <button class="btn btn-sm btn-secondary" onclick="UI.openModal('add-exp-modal')">+ Experiência</button>
+      <button class="btn btn-sm btn-secondary" id="btn-my-jobs" style="display:none" onclick="App.openMyJobs()">📋 Minhas Vagas</button>
+      <button class="btn btn-sm btn-secondary" id="btn-conversations" onclick="App.openConversations()" style="position:relative">
+        💬 Mensagens <span id="nav-unread-badge" style="display:none;background:var(--accent);color:#fff;border-radius:99px;padding:0 5px;font-size:0.7rem;position:absolute;top:-4px;right:-4px">0</span>
+      </button>
     </div>
 
     <!-- Profile Grid -->
@@ -419,6 +776,140 @@
 
   </div>
 </div><!-- /page-profile -->
+
+
+<!-- ============================================================
+     PAGE: MINHAS CANDIDATURAS (devs)
+     ============================================================ -->
+<div class="page" id="page-my-applications">
+  <div class="section">
+    <div class="section-tag">📨 MINHAS CANDIDATURAS</div>
+    <h2 class="section-title" style="margin-bottom:0.5rem">Vagas que me candidatei</h2>
+    <p style="color:var(--text3);font-size:0.88rem;margin-bottom:2rem">Acompanhe o status de todas as suas candidaturas.</p>
+
+    <!-- Stats -->
+    <div class="how-grid" id="myapp-stats" style="margin-bottom:2rem">
+      <div class="card" style="text-align:center;padding:0.85rem 1rem">
+        <div style="font-size:1.8rem;font-weight:800;color:var(--accent)" id="myapp-stat-total">—</div>
+        <div style="font-size:0.7rem;color:var(--text3)">TOTAL</div>
+      </div>
+      <div class="card" style="text-align:center;padding:0.85rem 1rem">
+        <div style="font-size:1.8rem;font-weight:800;color:#60a5fa" id="myapp-stat-pending">—</div>
+        <div style="font-size:0.7rem;color:var(--text3)">PENDENTES</div>
+      </div>
+      <div class="card" style="text-align:center;padding:0.85rem 1rem">
+        <div style="font-size:1.8rem;font-weight:800;color:var(--accent)" id="myapp-stat-accepted">—</div>
+        <div style="font-size:0.7rem;color:var(--text3)">APROVADAS</div>
+      </div>
+      <div class="card" style="text-align:center;padding:0.85rem 1rem">
+        <div style="font-size:1.8rem;font-weight:800;color:#f59e0b" id="myapp-stat-rejected">—</div>
+        <div style="font-size:0.7rem;color:var(--text3)">REJEITADAS</div>
+      </div>
+    </div>
+
+    <!-- Filtro por status -->
+    <div style="display:flex;gap:0.6rem;flex-wrap:wrap;margin-bottom:1.5rem">
+      <button class="btn btn-sm btn-secondary myapp-filter active" data-status="" onclick="App.filterMyApplications('')">Todas</button>
+      <button class="btn btn-sm btn-secondary myapp-filter" data-status="pending"  onclick="App.filterMyApplications('pending')">⏳ Pendentes</button>
+      <button class="btn btn-sm btn-secondary myapp-filter" data-status="viewed"   onclick="App.filterMyApplications('viewed')">👁️ Visualizadas</button>
+      <button class="btn btn-sm btn-secondary myapp-filter" data-status="accepted" onclick="App.filterMyApplications('accepted')">✅ Aprovadas</button>
+      <button class="btn btn-sm btn-secondary myapp-filter" data-status="rejected" onclick="App.filterMyApplications('rejected')">❌ Rejeitadas</button>
+    </div>
+
+    <div id="my-applications-list">
+      <div class="empty-state"><div class="loading-spinner" style="margin:0 auto"></div></div>
+    </div>
+  </div>
+</div><!-- /page-my-applications -->
+
+
+<!-- ============================================================
+     PAGE: PAINEL DA EMPRESA
+     ============================================================ -->
+<div class="page" id="page-company">
+  <div class="section">
+
+    <div class="section-tag">📋 MINHAS VAGAS</div>
+    <h2 class="section-title" style="margin-bottom:0.5rem" id="company-panel-title">Vagas Publicadas</h2>
+    <p style="color:var(--text3);font-size:0.88rem;margin-bottom:2rem">Gerencie suas vagas, veja os candidatos e converse com eles.</p>
+
+    <!-- Tabs -->
+    <div class="tab-switcher" style="margin-bottom:2rem" id="company-tabs">
+      <button class="tab-btn active" id="ctab-jobs"      onclick="App.companyTab('jobs')">📋 Minhas Vagas</button>
+      <button class="tab-btn"        id="ctab-applicants" onclick="App.companyTab('applicants')">👥 Candidatos</button>
+      <button class="tab-btn"        id="ctab-messages"   onclick="App.companyTab('messages')">
+        💬 Mensagens
+        <span id="company-unread-badge" style="display:none;background:var(--accent);color:#000;border-radius:99px;padding:1px 7px;font-size:0.68rem;font-weight:800;margin-left:4px">0</span>
+      </button>
+    </div>
+
+    <!-- ── TAB: MINHAS VAGAS ── -->
+    <div id="cpanel-jobs">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:0.75rem">
+        <div style="font-size:0.85rem;color:var(--text3)" id="company-jobs-count">Carregando...</div>
+        <button class="btn btn-primary btn-sm" onclick="App.navigate('post-job')">＋ Publicar Nova Vaga</button>
+      </div>
+      <div id="company-jobs-list">
+        <div class="empty-state"><div class="loading-spinner" style="margin:0 auto"></div></div>
+      </div>
+    </div>
+
+    <!-- ── TAB: CANDIDATOS ── -->
+    <div id="cpanel-applicants" style="display:none">
+      <!-- Filtro de vaga -->
+      <div style="margin-bottom:1.25rem">
+        <label class="form-label" style="margin-bottom:0.5rem;display:block">FILTRAR POR VAGA</label>
+        <select class="form-select" id="applicant-job-filter" onchange="App.loadApplicantsForJob(this.value)" style="max-width:400px">
+          <option value="">— Selecione uma vaga —</option>
+        </select>
+      </div>
+      <!-- Stats bar -->
+      <div id="applicants-stats-bar" style="display:none;gap:0.75rem;margin-bottom:1.25rem;flex-wrap:wrap" class="how-grid">
+        <div class="card" style="text-align:center;padding:0.85rem 1rem">
+          <div style="font-size:1.6rem;font-weight:800;color:var(--accent)" id="astat-total">0</div>
+          <div style="font-size:0.7rem;color:var(--text3)">TOTAL</div>
+        </div>
+        <div class="card" style="text-align:center;padding:0.85rem 1rem">
+          <div style="font-size:1.6rem;font-weight:800;color:#60a5fa" id="astat-pending">0</div>
+          <div style="font-size:0.7rem;color:var(--text3)">PENDENTES</div>
+        </div>
+        <div class="card" style="text-align:center;padding:0.85rem 1rem">
+          <div style="font-size:1.6rem;font-weight:800;color:var(--accent)" id="astat-accepted">0</div>
+          <div style="font-size:0.7rem;color:var(--text3)">APROVADOS</div>
+        </div>
+        <div class="card" style="text-align:center;padding:0.85rem 1rem">
+          <div style="font-size:1.6rem;font-weight:800;color:#f59e0b" id="astat-rejected">0</div>
+          <div style="font-size:0.7rem;color:var(--text3)">REJEITADOS</div>
+        </div>
+      </div>
+      <!-- Search + filter -->
+      <div style="display:flex;gap:0.75rem;margin-bottom:1.25rem;flex-wrap:wrap" id="applicants-filter-bar" style="display:none">
+        <input type="text" class="form-input" id="applicant-search" placeholder="🔍 Buscar candidato..." style="max-width:280px" oninput="App.filterApplicants()">
+        <select class="form-select" id="applicant-status-filter" style="max-width:180px" onchange="App.filterApplicants()">
+          <option value="">Todos os status</option>
+          <option value="pending">⏳ Pendentes</option>
+          <option value="viewed">👁️ Visualizados</option>
+          <option value="accepted">✅ Aprovados</option>
+          <option value="rejected">❌ Rejeitados</option>
+        </select>
+      </div>
+      <div id="company-applicants-list">
+        <div class="empty-state">
+          <div class="empty-state-icon">👥</div>
+          <div class="empty-state-text">Selecione uma vaga para ver os candidatos.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── TAB: MENSAGENS ── -->
+    <div id="cpanel-messages" style="display:none">
+      <div id="company-conversations-list">
+        <div class="empty-state"><div class="loading-spinner" style="margin:0 auto"></div></div>
+      </div>
+    </div>
+
+  </div>
+</div><!-- /page-company -->
 
 
 <!-- ============================================================
@@ -515,7 +1006,133 @@
   </div>
 </div>
 
-<!-- EDIT PROFILE -->
+<!-- EDIT JOB -->
+<div class="modal-overlay" id="edit-job-modal">
+  <div class="modal modal-wide" style="max-height:90vh;overflow-y:auto">
+    <button class="modal-close" onclick="UI.closeModal('edit-job-modal')">✕</button>
+    <div class="modal-title">✏️ Editar Vaga</div>
+    <div class="modal-sub" id="edit-job-modal-sub">Atualize os dados da vaga</div>
+    <input type="hidden" id="edit-job-id">
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">TÍTULO DA VAGA *</label>
+        <input type="text" class="form-input" id="ej-title" placeholder="ex: Desenvolvedor Frontend Sênior">
+      </div>
+      <div class="form-group">
+        <label class="form-label">EMPRESA *</label>
+        <input type="text" class="form-input" id="ej-company" placeholder="Nome da empresa">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">TIPO DE CONTRATO</label>
+        <select class="form-select" id="ej-type">
+          <option>CLT</option><option>PJ</option><option>Freelance</option><option>Estágio</option><option>Temporário</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">MODALIDADE</label>
+        <select class="form-select" id="ej-mode">
+          <option>Remoto</option><option>Presencial</option><option>Híbrido</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">SALÁRIO / REMUNERAÇÃO</label>
+        <input type="text" class="form-input" id="ej-salary" placeholder="ex: R$ 8.000 – R$ 12.000 / mês">
+      </div>
+      <div class="form-group">
+        <label class="form-label">LOCALIZAÇÃO</label>
+        <input type="text" class="form-input" id="ej-location" placeholder="ex: São Paulo, SP">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">ÁREA</label>
+        <input type="text" class="form-input" id="ej-area" placeholder="ex: Backend, Frontend, Data...">
+      </div>
+      <div class="form-group">
+        <label class="form-label">NÍVEL</label>
+        <select class="form-select" id="ej-level">
+          <option>Júnior</option><option>Pleno</option><option>Sênior</option><option>Tech Lead</option><option>A combinar</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">TECNOLOGIAS (separadas por vírgula)</label>
+      <input type="text" class="form-input" id="ej-stack" placeholder="React, Node.js, Python...">
+    </div>
+    <div class="form-group">
+      <label class="form-label">DESCRIÇÃO DA VAGA *</label>
+      <textarea class="form-textarea" id="ej-desc" placeholder="Descreva as responsabilidades, contexto e diferenciais..." style="min-height:120px"></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">REQUISITOS (um por linha)</label>
+      <textarea class="form-textarea" id="ej-reqs" placeholder="Experiência com React&#10;Inglês intermediário&#10;..." style="min-height:90px"></textarea>
+    </div>
+
+    <div style="display:flex;gap:0.75rem;margin-top:0.5rem">
+      <button class="btn btn-primary" style="flex:1" onclick="App.saveJobEdit()">💾 Salvar Alterações</button>
+      <button class="btn btn-secondary" onclick="UI.closeModal('edit-job-modal')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- CANDIDATE PROFILE -->
+<div class="modal-overlay" id="candidate-profile-modal">
+  <div class="modal modal-wide" style="max-height:92vh;overflow-y:auto">
+    <button class="modal-close" onclick="UI.closeModal('candidate-profile-modal')">✕</button>
+
+    <!-- Header -->
+    <div style="display:flex;align-items:center;gap:1.25rem;margin-bottom:1.5rem;flex-wrap:wrap">
+      <div id="cpm-avatar" style="width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#8b5cf6);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.3rem;color:#000;flex-shrink:0">TF</div>
+      <div style="flex:1">
+        <div style="font-size:1.3rem;font-weight:800;color:var(--text1)" id="cpm-name">—</div>
+        <div style="font-size:0.85rem;color:var(--accent);font-weight:600;margin-top:0.15rem" id="cpm-role">—</div>
+        <div style="display:flex;gap:0.6rem;margin-top:0.5rem;flex-wrap:wrap" id="cpm-links"></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:0.5rem">
+        <button class="btn btn-primary btn-sm" id="cpm-msg-btn" onclick="">💬 Enviar Mensagem</button>
+        <select class="form-select" id="cpm-status-sel" style="font-size:0.78rem;padding:0.35rem 0.6rem" onchange="App.updateStatusFromProfile(this.value)">
+          <option value="pending">⏳ Pendente</option>
+          <option value="viewed">👁️ Visualizado</option>
+          <option value="accepted">✅ Aprovado</option>
+          <option value="rejected">❌ Rejeitado</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Bio -->
+    <div id="cpm-bio" style="font-size:0.88rem;color:var(--text2);line-height:1.65;margin-bottom:1.25rem;padding:0.85rem 1rem;background:rgba(255,255,255,0.03);border-radius:10px;border:1px solid var(--border2)"></div>
+
+    <!-- Skills -->
+    <div id="cpm-skills-block" style="margin-bottom:1.25rem">
+      <div style="font-size:0.75rem;font-weight:700;color:var(--text3);letter-spacing:.08em;margin-bottom:0.5rem">HABILIDADES</div>
+      <div id="cpm-skills" style="display:flex;flex-wrap:wrap;gap:0.4rem"></div>
+    </div>
+
+    <!-- Carta de apresentação -->
+    <div id="cpm-cover-block" style="margin-bottom:1.25rem;display:none">
+      <div style="font-size:0.75rem;font-weight:700;color:var(--text3);letter-spacing:.08em;margin-bottom:0.5rem">CARTA DE APRESENTAÇÃO</div>
+      <div id="cpm-cover" style="font-size:0.85rem;color:var(--text2);line-height:1.65;padding:0.85rem 1rem;background:rgba(99,102,241,0.05);border:1px solid rgba(99,102,241,0.2);border-radius:10px;font-style:italic"></div>
+    </div>
+
+    <!-- Experiences -->
+    <div id="cpm-exp-block" style="margin-bottom:1.25rem">
+      <div style="font-size:0.75rem;font-weight:700;color:var(--text3);letter-spacing:.08em;margin-bottom:0.75rem">💼 EXPERIÊNCIAS</div>
+      <div id="cpm-experiences"></div>
+    </div>
+
+    <!-- Portfolio -->
+    <div id="cpm-port-block">
+      <div style="font-size:0.75rem;font-weight:700;color:var(--text3);letter-spacing:.08em;margin-bottom:0.75rem">🗂️ PORTFÓLIO</div>
+      <div id="cpm-portfolio" class="portfolio-grid"></div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="edit-profile-modal">
   <div class="modal">
     <button class="modal-close" onclick="UI.closeModal('edit-profile-modal')">✕</button>
@@ -658,12 +1275,12 @@
     <div id="adm-panel-config">
       <div class="card">
         <h3 style="font-family:var(--font-display);font-weight:700;font-size:1.05rem;margin-bottom:1.5rem">
-          🔑 NOWPayments — Configuração
+          💳 Mercado Pago — Configuração
         </h3>
 
-        <!-- Ambiente em destaque -->
+        <!-- Ambiente -->
         <div style="margin-bottom:1.5rem">
-          <label class="form-label" style="margin-bottom:0.5rem;display:block">⚠️ AMBIENTE (escolha ANTES de copiar a API Key)</label>
+          <label class="form-label" style="margin-bottom:0.5rem;display:block">⚠️ AMBIENTE</label>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem">
             <label id="env-sandbox-label" style="display:flex;align-items:center;gap:0.75rem;padding:0.85rem 1rem;border:2px solid var(--accent);border-radius:12px;cursor:pointer;background:rgba(99,102,241,0.08)">
               <input type="radio" name="adm-sandbox-radio" value="true" id="radio-sandbox" onchange="App.adminUpdateEnv()" style="accent-color:var(--accent)">
@@ -676,55 +1293,35 @@
               <input type="radio" name="adm-sandbox-radio" value="false" id="radio-prod" onchange="App.adminUpdateEnv()" style="accent-color:var(--accent)">
               <div>
                 <div style="font-weight:700;font-size:0.9rem">🚀 Produção</div>
-                <div style="font-size:0.72rem;color:var(--text3)">Dinheiro real — use a chave de produção</div>
+                <div style="font-size:0.72rem;color:var(--text3)">Dinheiro real — use as credenciais de produção</div>
               </div>
             </label>
           </div>
-          <div id="adm-env-warning" style="margin-top:0.6rem;padding:0.6rem 0.85rem;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:8px;font-size:0.78rem;color:#f59e0b">
-            ⚠️ <strong>Atenção:</strong> as chaves de Sandbox e Produção são DIFERENTES na NOWPayments. A chave que você pegar em <em>nowpayments.io → Configurações → API Keys</em> deve ser do mesmo ambiente selecionado acima.
-          </div>
         </div>
 
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">API KEY (NOWPayments)</label>
-            <input type="password" class="form-input" id="adm-api-key" placeholder="Cole aqui a API Key do ambiente selecionado" autocomplete="off">
-            <div id="adm-api-key-preview" style="font-size:0.73rem;color:var(--text3);margin-top:0.3rem"></div>
+            <label class="form-label">ACCESS TOKEN (Mercado Pago)</label>
+            <input type="password" class="form-input" id="adm-mp-access-token" placeholder="APP_USR-... ou TEST-..." autocomplete="off">
+            <div id="adm-mp-at-preview" style="font-size:0.73rem;color:var(--text3);margin-top:0.3rem"></div>
+            <small style="color:var(--text3);font-size:0.75rem">Obtenha em <strong>mercadopago.com → Aplicações → Credenciais</strong></small>
           </div>
           <div class="form-group">
-            <label class="form-label">IPN SECRET</label>
-            <input type="password" class="form-input" id="adm-ipn-secret" placeholder="Segredo para validar webhooks" autocomplete="off">
-            <small style="color:var(--text3);font-size:0.75rem">Gerado nas configurações de IPN da NOWPayments</small>
+            <label class="form-label">PUBLIC KEY (Mercado Pago)</label>
+            <input type="text" class="form-input" id="adm-mp-public-key" placeholder="APP_USR-... ou TEST-..." autocomplete="off">
+            <small style="color:var(--text3);font-size:0.75rem">Usada no frontend para o SDK do MP</small>
           </div>
         </div>
 
-        <!-- Campo oculto para sandbox -->
         <input type="hidden" id="adm-sandbox" value="true">
 
-        <div class="form-group">
-          <label class="form-label">CARTEIRA DE RECEBIMENTO (USDT — Bybit ou outra)</label>
-          <input type="text" class="form-input" id="adm-wallet" placeholder="Endereço TRC20 / ERC20 / etc da sua carteira Bybit">
-          <small style="color:var(--text3);font-size:0.75rem">Os pagamentos serão convertidos e enviados automaticamente para este endereço</small>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">MOEDA DE RECEBIMENTO</label>
-            <select class="form-select" id="adm-currency">
-              <option value="usdttrc20">USDT (TRC20 — Bybit padrão)</option>
-              <option value="usdterc20">USDT (ERC20)</option>
-              <option value="usdtbep20">USDT (BEP20 / BSC)</option>
-              <option value="usdc">USDC</option>
-              <option value="btc">BTC</option>
-              <option value="eth">ETH</option>
-            </select>
-          </div>
-          <div class="form-group"></div>
+        <div style="background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.2);border-radius:10px;padding:0.85rem 1rem;margin-bottom:1.25rem;font-size:0.8rem;color:var(--text2)">
+          ℹ️ PIX, cartão de crédito e boleto são aceitos automaticamente pelo Mercado Pago. Nenhuma configuração adicional é necessária.
         </div>
 
         <div style="display:flex;gap:1rem;margin-top:0.5rem;flex-wrap:wrap">
           <button class="btn btn-primary" onclick="App.adminSaveConfig()">💾 Salvar Configurações</button>
-          <button class="btn btn-secondary" onclick="App.adminTestConnection()">🔌 Testar Conexão Crypto</button>
+          <button class="btn btn-secondary" onclick="App.adminTestConnection()">🔌 Testar Conexão MP</button>
         </div>
       </div>
 
@@ -739,7 +1336,7 @@
   <div class="modal">
     <button class="modal-close" onclick="UI.closeModal('payment-modal')">✕</button>
     <div class="modal-title">💳 Comprar Créditos</div>
-    <div class="modal-sub" id="payment-modal-sub">Selecione o método de pagamento</div>
+    <div class="modal-sub" id="payment-modal-sub">Pagamento seguro via Mercado Pago</div>
 
     <!-- Package summary -->
     <div style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:12px;padding:1rem 1.25rem;margin-bottom:1.5rem" id="payment-pkg-summary">
@@ -752,39 +1349,22 @@
       </div>
     </div>
 
-    <!-- Payment methods -->
+    <!-- Métodos aceitos pelo MP -->
     <div style="margin-bottom:1.25rem">
-      <label class="form-label" style="margin-bottom:0.75rem;display:block">FORMA DE PAGAMENTO</label>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.75rem" id="pay-methods">
-        <button class="pay-method-btn active" id="pmb-crypto" onclick="App.selectPayMethod('crypto')">
-          <span style="font-size:1.5rem">₿</span>
-          <div>
-            <div style="font-weight:700;font-size:0.85rem">Bitcoin</div>
-            <div style="font-size:0.7rem;color:var(--text3)">BTC</div>
-          </div>
-        </button>
-        <button class="pay-method-btn" id="pmb-eth" onclick="App.selectPayMethod('eth')">
-          <span style="font-size:1.5rem">Ξ</span>
-          <div>
-            <div style="font-weight:700;font-size:0.85rem">Ethereum</div>
-            <div style="font-size:0.7rem;color:var(--text3)">ETH</div>
-          </div>
-        </button>
-        <button class="pay-method-btn" id="pmb-usdt" onclick="App.selectPayMethod('usdt')">
-          <span style="font-size:1.5rem">💵</span>
-          <div>
-            <div style="font-weight:700;font-size:0.85rem">USDT</div>
-            <div style="font-size:0.7rem;color:var(--text3)">Stablecoin</div>
-          </div>
-        </button>
+      <label class="form-label" style="margin-bottom:0.75rem;display:block">FORMAS DE PAGAMENTO ACEITAS</label>
+      <div style="display:flex;gap:0.6rem;flex-wrap:wrap">
+        <span style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.45rem 0.8rem;background:rgba(255,255,255,0.05);border:1px solid var(--border2);border-radius:8px;font-size:0.8rem;font-weight:600">🟦 PIX</span>
+        <span style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.45rem 0.8rem;background:rgba(255,255,255,0.05);border:1px solid var(--border2);border-radius:8px;font-size:0.8rem;font-weight:600">💳 Cartão de Crédito</span>
+        <span style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.45rem 0.8rem;background:rgba(255,255,255,0.05);border:1px solid var(--border2);border-radius:8px;font-size:0.8rem;font-weight:600">📄 Boleto</span>
+        <span style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.45rem 0.8rem;background:rgba(255,255,255,0.05);border:1px solid var(--border2);border-radius:8px;font-size:0.8rem;font-weight:600">💰 Débito</span>
       </div>
-      <div style="margin-top:0.6rem;font-size:0.75rem;color:var(--text3);text-align:center">
-        Mais de 150 criptomoedas disponíveis no checkout →
+      <div style="margin-top:0.6rem;font-size:0.75rem;color:var(--text3)">
+        O Mercado Pago exibirá todas as opções disponíveis para você no checkout.
       </div>
     </div>
 
     <div style="font-size:0.78rem;color:var(--text3);text-align:center;margin-bottom:1.25rem">
-      🔒 Pagamento 100% crypto via <strong>NOWPayments</strong> · +150 moedas disponíveis
+      🔒 Pagamento 100% seguro via <strong>Mercado Pago</strong> · Créditos liberados automaticamente após confirmação
     </div>
 
     <button class="btn btn-full btn-primary" onclick="App.confirmPayment()" id="btn-confirm-pay">
@@ -794,8 +1374,57 @@
     <div id="pay-status-area" style="display:none;margin-top:1.25rem;text-align:center">
       <div class="loading-spinner" style="margin:0 auto 0.75rem"></div>
       <div style="font-size:0.85rem;color:var(--text2)" id="pay-status-msg">Aguardando pagamento…</div>
-      <div style="font-size:0.75rem;color:var(--text3);margin-top:0.5rem">A janela de pagamento foi aberta. Conclua o pagamento e aguarde a confirmação.</div>
+      <div style="font-size:0.75rem;color:var(--text3);margin-top:0.5rem">A janela do Mercado Pago foi aberta. Conclua o pagamento e aguarde a confirmação.</div>
     </div>
+  </div>
+</div>
+
+
+<!-- ============================================================
+     MODAL: CANDIDATOS DA VAGA (para dono da vaga)
+     ============================================================ -->
+<div class="modal-overlay" id="applicants-modal">
+  <div class="modal modal-wide" style="max-height:90vh;overflow-y:auto">
+    <button class="modal-close" onclick="UI.closeModal('applicants-modal')">✕</button>
+    <div class="modal-title">👥 Candidatos</div>
+    <div class="modal-sub" id="applicants-modal-sub">Candidatos à sua vaga</div>
+
+    <div id="applicants-list" style="margin-top:1rem"></div>
+  </div>
+</div>
+
+<!-- ============================================================
+     MODAL: CHAT / MENSAGENS
+     ============================================================ -->
+<div class="modal-overlay" id="chat-modal">
+  <div class="modal" style="max-height:90vh;display:flex;flex-direction:column">
+    <button class="modal-close" onclick="UI.closeModal('chat-modal')">✕</button>
+    <div class="modal-title" id="chat-modal-title">💬 Conversa</div>
+    <div class="modal-sub" id="chat-modal-sub"></div>
+
+    <!-- Messages area -->
+    <div id="chat-messages" style="flex:1;overflow-y:auto;padding:1rem 0;min-height:250px;max-height:400px;display:flex;flex-direction:column;gap:0.6rem"></div>
+
+    <!-- Input area -->
+    <div style="display:flex;gap:0.75rem;margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid var(--border2)">
+      <textarea id="chat-input" class="form-textarea"
+        placeholder="Digite sua mensagem..."
+        style="flex:1;min-height:60px;max-height:120px;resize:vertical;margin-bottom:0"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();App.sendChatMessage()}"></textarea>
+      <button class="btn btn-primary" style="align-self:flex-end" onclick="App.sendChatMessage()">Enviar ➤</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     MODAL: MINHAS VAGAS (empresa vê vagas que publicou)
+     ============================================================ -->
+<div class="modal-overlay" id="my-jobs-modal">
+  <div class="modal modal-wide" style="max-height:90vh;overflow-y:auto">
+    <button class="modal-close" onclick="UI.closeModal('my-jobs-modal')">✕</button>
+    <div class="modal-title">📋 Minhas Vagas Publicadas</div>
+    <div class="modal-sub">Gerencie suas vagas e veja os candidatos</div>
+    <div id="my-jobs-list" style="margin-top:1rem"></div>
   </div>
 </div>
 

@@ -211,3 +211,30 @@ class AdminConfig(Base):
 
     def to_dict(self):
         return {"key": self.key, "value": self.value}
+
+
+class Message(Base):
+    __tablename__ = "messages"
+
+    id             = Column(Integer, primary_key=True, autoincrement=True)
+    sender_id      = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    receiver_id    = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    application_id = Column(Integer, ForeignKey("applications.id", ondelete="CASCADE"), nullable=False)
+    content        = Column(Text, nullable=False)
+    read_at        = Column(DateTime, nullable=True)
+    created_at     = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    sender      = relationship("User", foreign_keys=[sender_id])
+    receiver    = relationship("User", foreign_keys=[receiver_id])
+    application = relationship("Application")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "sender_id": self.sender_id,
+            "receiver_id": self.receiver_id,
+            "application_id": self.application_id,
+            "content": self.content,
+            "read_at": self.read_at.isoformat()+"Z" if self.read_at else None,
+            "created_at": self.created_at.isoformat()+"Z" if self.created_at else None,
+        }

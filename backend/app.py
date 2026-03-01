@@ -40,7 +40,7 @@ try:
 except ImportError:
     HAS_CORS = False
 
-from models.database import Base, User, Job, Experience, PortfolioItem, Application, CreditEvent, Payment, AdminConfig
+from models.database import Base, User, Job, Experience, PortfolioItem, Application, CreditEvent, Payment, AdminConfig, Message
 
 # ============================================================
 # CONFIGURAÇÃO
@@ -61,8 +61,7 @@ CREDIT_PACKAGES = [
 WELCOME_CREDITS  = 10
 JOB_DURATION_DAYS = 30
 
-NOWPAYMENTS_API  = "https://api.nowpayments.io/v1"
-NOWPAYMENTS_SANDBOX_API = "https://api-sandbox.nowpayments.io/v1"
+MP_API_BASE = "https://api.mercadopago.com"
 
 # ============================================================
 # FLASK
@@ -159,13 +158,16 @@ def set_admin_config(db, key, value):
     else:
         db.add(AdminConfig(key=key, value=value))
 
-def nowpayments_headers(api_key):
-    return {"x-api-key": api_key, "Content-Type": "application/json"}
+def mp_headers(access_token):
+    return {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
 
-def get_nowpayments_base(db):
+def get_mp_access_token(db):
     cfg = get_admin_config(db)
-    sandbox = cfg.get("nowpayments_sandbox", "true").lower() == "true"
-    return NOWPAYMENTS_SANDBOX_API if sandbox else NOWPAYMENTS_API
+    return cfg.get("mp_access_token", "")
+
+def is_mp_sandbox(db):
+    cfg = get_admin_config(db)
+    return cfg.get("mp_sandbox", "true").lower() == "true"
 
 def current_user(db=None):
     uid = session.get("user_id")
@@ -286,6 +288,21 @@ def list_jobs():
                     "pages": (total + per_page - 1) // per_page})
 
 
+@app.route("/api/jobs/mine", methods=["GET"])
+@require_auth
+def my_jobs():
+    """Vagas publicadas pelo usuário logado (empresas)."""
+    db   = get_db()
+    user = current_user(db)
+    jobs = db.query(Job).filter_by(owner_id=user.id).order_by(Job.created_at.desc()).all()
+    result = []
+    for j in jobs:
+        d = j.to_public(include_contact=True)
+        d["applicants_count"] = db.query(Application).filter_by(job_id=j.id).count()
+        result.append(d)
+    return jsonify({"jobs": result})
+
+
 @app.route("/api/jobs/<int:job_id>")
 @require_auth
 def get_job(job_id):
@@ -345,6 +362,62 @@ def create_job():
     return jsonify({"message": "Vaga publicada! Ativa por 30 dias 🎉",
                     "job": job.to_public(include_contact=True),
                     "credits_spent": cost, "balance": user.credits}), 201
+
+
+@app.route("/api/jobs/<int:job_id>", methods=["PUT"])
+@require_auth
+def update_job(job_id):
+    """Dono da vaga edita os dados da vaga."""
+    db   = get_db()
+    user = current_user(db)
+    job  = db.query(Job).filter_by(id=job_id, owner_id=user.id).first()
+    if not job:
+        return jsonify({"error": "Vaga não encontrada ou sem permissão."}), 404
+
+    d = request.get_json() or {}
+    for field in ["title","company","salary","location","area","level","description"]:
+        if field in d and str(d[field]).strip():
+            # map "description" -> desc column
+            col = "description" if field == "description" else field
+            setattr(job, col, str(d[field]).strip())
+
+    if "desc" in d and str(d["desc"]).strip():
+        job.description = str(d["desc"]).strip()
+    if "type" in d and d["type"] in {"CLT","PJ","Freelance","Estágio","Temporário"}:
+        job.type = d["type"]
+    if "mode" in d and d["mode"] in {"Remoto","Presencial","Híbrido"}:
+        job.mode = d["mode"]
+    if "stack" in d:
+        stack = d["stack"]
+        if isinstance(stack, str):
+            stack = [s.strip() for s in stack.split(",") if s.strip()]
+        job.stack = stack
+    if "requirements" in d:
+        reqs = d["requirements"]
+        if isinstance(reqs, str):
+            reqs = [r.strip() for r in reqs.split("\n") if r.strip()]
+        job.requirements = reqs
+    if "benefits" in d:
+        job.benefits = d["benefits"]
+
+    db.commit()
+    db.refresh(job)
+    return jsonify({"message": "Vaga atualizada!", "job": job.to_public(include_contact=True)})
+
+
+@app.route("/api/jobs/<int:job_id>/toggle", methods=["POST"])
+@require_auth
+def toggle_job(job_id):
+    """Ativa ou pausa uma vaga."""
+    db   = get_db()
+    user = current_user(db)
+    job  = db.query(Job).filter_by(id=job_id, owner_id=user.id).first()
+    if not job:
+        return jsonify({"error": "Vaga não encontrada ou sem permissão."}), 404
+    job.active = not job.active
+    db.commit()
+    status = "ativada" if job.active else "pausada"
+    return jsonify({"message": f"Vaga {status}!", "active": job.active})
 
 
 @app.route("/api/jobs/<int:job_id>/apply", methods=["POST"])
@@ -481,13 +554,13 @@ def purchase_credits():
 
 
 # ============================================================
-# PAYMENTS — NOWPayments Integration
+# PAYMENTS — Mercado Pago Integration
 # ============================================================
 
 @app.route("/api/payments/create", methods=["POST"])
 @require_auth
 def create_payment():
-    """Create a NOWPayments invoice and return the checkout URL."""
+    """Cria preferência de pagamento no Mercado Pago e retorna URL de checkout."""
     db   = get_db()
     user = current_user(db)
     d    = request.get_json() or {}
@@ -496,120 +569,109 @@ def create_payment():
     if not pkg:
         return jsonify({"error": "Pacote inválido."}), 400
 
-    cfg = get_admin_config(db)
-    api_key  = cfg.get("nowpayments_api_key", "")
-    wallet   = cfg.get("receiving_wallet", "")
-    currency = cfg.get("receiving_currency", "usdttrc20")
-    ipn_secret = cfg.get("nowpayments_ipn_secret", "")
-
-    if not api_key:
+    access_token = get_mp_access_token(db)
+    if not access_token:
         return jsonify({"error": "Pagamentos não configurados. Contate o administrador."}), 503
 
-    base_url = get_nowpayments_base(db)
-    site_url = request.host_url.rstrip("/")
+    sandbox   = is_mp_sandbox(db)
+    site_url  = request.host_url.rstrip("/")
+    order_id  = f"TF-{user.id}-{int(datetime.utcnow().timestamp())}"
 
     payload = {
-        "price_amount":    pkg["price"],
-        "price_currency":  "brl",
-        "pay_currency":    currency,
-        "order_id":        f"TF-{user.id}-{int(datetime.utcnow().timestamp())}",
-        "order_description": f"TechFreela — {pkg['credits']} créditos ({pkg['label']})",
-        "ipn_callback_url": f"{site_url}/api/payments/webhook",
-        "success_url":      f"{site_url}/?payment=success",
-        "cancel_url":       f"{site_url}/?payment=cancel",
-        "is_fixed_rate":    False,
-        "is_fee_paid_by_user": False,
+        "items": [{
+            "id":          pkg["id"],
+            "title":       f"TechFreela — {pkg['credits']} créditos ({pkg['label']})",
+            "quantity":    1,
+            "unit_price":  pkg["price"],
+            "currency_id": "BRL",
+        }],
+        "payer": {"email": user.email},
+        "back_urls": {
+            "success": f"{site_url}/?payment=success",
+            "failure": f"{site_url}/?payment=cancel",
+            "pending": f"{site_url}/?payment=pending",
+        },
+        "auto_return":        "approved",
+        "notification_url":   f"{site_url}/api/payments/webhook",
+        "external_reference": order_id,
+        "statement_descriptor": "TechFreela",
     }
-
-    if wallet:
-        # payout_address só é aceito em /payment, não em /invoice
-        # A carteira de destino é configurada no painel da NOWPayments
-        pass  # wallet salva no admin apenas para referência
 
     try:
         resp = http_requests.post(
-            f"{base_url}/invoice",
+            f"{MP_API_BASE}/checkout/preferences",
             json=payload,
-            headers=nowpayments_headers(api_key),
+            headers=mp_headers(access_token),
             timeout=15
         )
         resp_data = resp.json()
         if not resp.ok:
-            sandbox = cfg.get("nowpayments_sandbox", "true").lower() == "true"
-            env_label = "Sandbox 🧪" if sandbox else "Produção 🚀"
-            raw_msg = resp_data.get("message", resp_data.get("error", "Erro desconhecido"))
-
-            # Mensagem amigável dependendo do erro
-            if resp.status_code in (401, 403) or "api key" in str(raw_msg).lower() or "invalid" in str(raw_msg).lower():
-                friendly = (f"API Key inválida para o ambiente {env_label}. "
-                            f"Chaves de Sandbox e Produção são diferentes — "
-                            f"verifique o ambiente nas configurações do admin.")
-            elif resp.status_code == 422:
-                friendly = f"Dados inválidos: {raw_msg}. Verifique a moeda configurada."
-            else:
-                friendly = f"Erro NOWPayments ({resp.status_code}): {raw_msg}"
-
-            print(f"[NOWPayments ERROR] status={resp.status_code} url={base_url}/invoice raw={raw_msg}")
-            return jsonify({"error": friendly, "detail": raw_msg}), 502
+            msg = resp_data.get("message", resp_data.get("error", "Erro desconhecido"))
+            return jsonify({"error": f"Erro Mercado Pago: {msg}"}), 502
     except Exception as e:
         return jsonify({"error": f"Falha de comunicação com gateway: {str(e)}"}), 502
 
-    invoice_id  = resp_data.get("id") or resp_data.get("invoice_id")
-    invoice_url = resp_data.get("invoice_url") or resp_data.get("payment_url")
+    preference_id        = resp_data.get("id")
+    init_point           = resp_data.get("init_point")
+    sandbox_init_point   = resp_data.get("sandbox_init_point")
+    checkout_url         = sandbox_init_point if sandbox else init_point
 
     pay = Payment(
         user_id=user.id,
         package_id=pkg["id"],
         credits=pkg["credits"],
         amount_brl=str(pkg["price"]),
-        payment_method=d.get("method", "pix"),
+        payment_method="pix",
         status="pending",
-        invoice_id=str(invoice_id) if invoice_id else None,
-        invoice_url=invoice_url,
-        ipn_callback_secret=ipn_secret,
+        invoice_id=preference_id,
+        invoice_url=checkout_url,
     )
     db.add(pay)
     db.commit()
     db.refresh(pay)
 
     return jsonify({
-        "payment_id":  pay.id,
-        "invoice_url": invoice_url,
-        "invoice_id":  invoice_id,
-        "package":     pkg,
+        "payment_id":    pay.id,
+        "invoice_url":   checkout_url,
+        "preference_id": preference_id,
+        "package":       pkg,
     }), 201
 
 
 @app.route("/api/payments/<int:payment_id>/status", methods=["GET"])
 @require_auth
 def payment_status(payment_id):
-    """Poll payment status."""
+    """Consulta status do pagamento."""
     db   = get_db()
     user = current_user(db)
     pay  = db.query(Payment).filter_by(id=payment_id, user_id=user.id).first()
     if not pay:
         return jsonify({"error": "Pagamento não encontrado."}), 404
 
-    # If finished, return immediately
     if pay.status == "finished":
         return jsonify({"status": pay.status, "payment": pay.to_dict(), "balance": user.credits})
 
-    # If we have a nowpayments_id, check live status
+    # Se já temos o MP payment_id, consulta o status diretamente
     if pay.nowpayments_id:
-        cfg = get_admin_config(db)
-        api_key = cfg.get("nowpayments_api_key", "")
-        base_url = get_nowpayments_base(db)
-        if api_key:
+        access_token = get_mp_access_token(db)
+        if access_token:
             try:
                 resp = http_requests.get(
-                    f"{base_url}/payment/{pay.nowpayments_id}",
-                    headers=nowpayments_headers(api_key),
+                    f"{MP_API_BASE}/v1/payments/{pay.nowpayments_id}",
+                    headers=mp_headers(access_token),
                     timeout=10
                 )
                 if resp.ok:
-                    rd = resp.json()
-                    pay.status = rd.get("payment_status", pay.status)
-                    if pay.status in ("finished","confirmed") and not pay.paid_at:
+                    mp_data = resp.json()
+                    mp_status = mp_data.get("status", "")
+                    status_map = {
+                        "approved": "finished", "pending": "pending",
+                        "in_process": "confirming", "rejected": "failed",
+                        "cancelled": "expired", "refunded": "refunded",
+                    }
+                    new_status = status_map.get(mp_status, pay.status)
+                    pay.status = new_status
+                    if new_status == "finished" and not pay.paid_at:
                         pay.paid_at = datetime.utcnow()
                         pkg = next((p for p in CREDIT_PACKAGES if p["id"] == pay.package_id), None)
                         if pkg:
@@ -625,63 +687,87 @@ def payment_status(payment_id):
 
 @app.route("/api/payments/webhook", methods=["POST"])
 def payment_webhook():
-    """NOWPayments IPN webhook — credits user upon confirmed payment."""
-    data = request.get_json(silent=True) or request.form.to_dict()
-    if not data:
+    """Webhook do Mercado Pago — credita o usuário após pagamento aprovado."""
+    # MP envia como query params ou no body JSON
+    topic      = request.args.get("topic") or request.args.get("type")
+    mp_pay_id  = request.args.get("id")
+
+    data = request.get_json(silent=True) or {}
+    if not mp_pay_id:
+        mp_pay_id = str(data.get("data", {}).get("id", ""))
+        topic = data.get("type", topic)
+
+    # Ignorar notificações que não são de pagamento
+    if topic not in ("payment", "merchant_order", None):
+        return jsonify({"ok": True}), 200
+
+    if not mp_pay_id:
         return jsonify({"ok": False}), 400
 
-    nowpay_id  = str(data.get("payment_id", ""))
-    order_id   = str(data.get("order_id", ""))       # TF-{user_id}-{ts}
-    new_status = data.get("payment_status", "")
-
     db = get_db()
+    access_token = get_mp_access_token(db)
+    if not access_token:
+        return jsonify({"ok": False}), 503
 
-    # Verify IPN signature if secret configured
-    cfg = get_admin_config(db)
-    ipn_secret = cfg.get("nowpayments_ipn_secret", "")
-    if ipn_secret:
-        received_sig = request.headers.get("x-nowpayments-sig", "")
-        sorted_data  = json.dumps(dict(sorted(data.items())), separators=(",", ":"))
-        expected_sig = hmac.new(ipn_secret.encode(), sorted_data.encode(), "sha512").hexdigest()
-        if not hmac.compare_digest(received_sig, expected_sig):
-            return jsonify({"ok": False, "error": "Invalid signature"}), 403
+    # Busca detalhes do pagamento no MP
+    try:
+        resp = http_requests.get(
+            f"{MP_API_BASE}/v1/payments/{mp_pay_id}",
+            headers=mp_headers(access_token),
+            timeout=10
+        )
+        if not resp.ok:
+            return jsonify({"ok": False}), 502
+        mp_data = resp.json()
+    except Exception:
+        return jsonify({"ok": False}), 502
 
-    # Find payment by order_id or nowpayments_id
-    pay = (db.query(Payment).filter_by(nowpayments_id=nowpay_id).first()
-           or db.query(Payment).filter(Payment.invoice_id.isnot(None)).filter(
-               Payment.user_id == int(order_id.split("-")[1]) if order_id.startswith("TF-") else False
-           ).first())
+    mp_status    = mp_data.get("status", "")
+    external_ref = mp_data.get("external_reference", "")
 
-    if not pay:
-        # Try to find by user/order pattern
+    # Localiza o pagamento pelo external_reference (TF-{user_id}-{ts})
+    pay = None
+    if external_ref.startswith("TF-"):
         try:
-            parts   = order_id.split("-")
-            user_id = int(parts[1]) if len(parts) >= 2 else None
-            if user_id:
-                pay = (db.query(Payment)
-                       .filter_by(user_id=user_id, status="pending")
-                       .order_by(Payment.created_at.desc()).first())
+            parts   = external_ref.split("-")
+            user_id = int(parts[1])
+            pay = (db.query(Payment)
+                   .filter_by(user_id=user_id)
+                   .filter(Payment.status.in_(["pending", "confirming", "waiting"]))
+                   .order_by(Payment.created_at.desc()).first())
         except Exception:
             pass
 
     if not pay:
+        pay = db.query(Payment).filter_by(nowpayments_id=str(mp_pay_id)).first()
+
+    if not pay:
         return jsonify({"ok": False, "error": "Payment not found"}), 404
 
-    pay.nowpayments_id = nowpay_id
-    pay.status = new_status
+    status_map = {
+        "approved":   "finished",
+        "pending":    "pending",
+        "in_process": "confirming",
+        "rejected":   "failed",
+        "cancelled":  "expired",
+        "refunded":   "refunded",
+    }
+    new_status = status_map.get(mp_status, "pending")
+    pay.status        = new_status
+    pay.nowpayments_id = str(mp_pay_id)   # reutiliza campo para guardar MP payment id
 
-    if new_status in ("finished", "confirmed") and not pay.paid_at:
+    if new_status == "finished" and not pay.paid_at:
         pay.paid_at = datetime.utcnow()
         user = db.query(User).filter_by(id=pay.user_id, is_active=True).first()
         if user:
-            pkg = next((p for p in CREDIT_PACKAGES if p["id"] == pay.package_id), None)
+            pkg   = next((p for p in CREDIT_PACKAGES if p["id"] == pay.package_id), None)
             label = pkg["label"] if pkg else pay.package_id
             add_credits(db, user, pay.credits,
-                        reason=f"Compra {label} ({pay.credits} cr) via NOWPayments",
-                        etype="purchase", ref=nowpay_id)
+                        reason=f"Compra {label} ({pay.credits} cr) via Mercado Pago",
+                        etype="purchase", ref=str(mp_pay_id))
 
     db.commit()
-    return jsonify({"ok": True})
+    return jsonify({"ok": True}), 200
 
 
 @app.route("/api/payments/history", methods=["GET"])
@@ -703,11 +789,12 @@ def payment_history():
 def admin_get_config():
     db  = get_db()
     cfg = get_admin_config(db)
-    # Never expose the raw API key — mask it
     safe = dict(cfg)
-    if safe.get("nowpayments_api_key"):
-        k = safe["nowpayments_api_key"]
-        safe["nowpayments_api_key"] = k[:6] + "****" + k[-4:] if len(k) > 10 else "****"
+    # Mask access token
+    for secret_key in ("mp_access_token", "mp_public_key"):
+        if safe.get(secret_key):
+            k = safe[secret_key]
+            safe[secret_key] = k[:6] + "****" + k[-4:] if len(k) > 10 else "****"
     return jsonify({"config": safe})
 
 
@@ -717,8 +804,7 @@ def admin_set_config():
     db = get_db()
     d  = request.get_json() or {}
     allowed_keys = {
-        "nowpayments_api_key", "nowpayments_ipn_secret", "nowpayments_sandbox",
-        "receiving_wallet", "receiving_currency",
+        "mp_access_token", "mp_public_key", "mp_sandbox",
     }
     for key, val in d.items():
         if key in allowed_keys:
@@ -730,12 +816,11 @@ def admin_set_config():
 @app.route("/api/admin/config/raw", methods=["GET"])
 @require_admin
 def admin_get_config_raw():
-    """Returns config with partial masking — used for form pre-fill and diagnostics."""
+    """Returns config with partial masking — para pré-preencher o formulário."""
     db  = get_db()
     cfg = get_admin_config(db)
-    # Mostra os primeiros 6 e últimos 4 chars da API key para confirmar qual está salva
     safe = dict(cfg)
-    for secret_key in ("nowpayments_api_key", "nowpayments_ipn_secret"):
+    for secret_key in ("mp_access_token", "mp_public_key"):
         val = safe.get(secret_key, "")
         if val:
             safe[secret_key + "_preview"] = val[:6] + "****" + val[-4:] if len(val) > 10 else "****"
@@ -773,66 +858,256 @@ def admin_payments():
     return jsonify({"payments": result})
 
 
-@app.route("/api/admin/test-nowpayments", methods=["POST"])
+@app.route("/api/admin/test-mercadopago", methods=["POST"])
 @require_admin
-def admin_test_nowpayments():
-    """Test NOWPayments API key using an authenticated endpoint (/currencies)."""
-    db  = get_db()
-    cfg = get_admin_config(db)
-    api_key  = cfg.get("nowpayments_api_key", "")
-    sandbox  = cfg.get("nowpayments_sandbox", "true").lower() == "true"
-    base_url = NOWPAYMENTS_SANDBOX_API if sandbox else NOWPAYMENTS_API
-    env_label = "Sandbox 🧪" if sandbox else "Produção 🚀"
+def admin_test_mercadopago():
+    """Testa o Access Token do Mercado Pago."""
+    db           = get_db()
+    access_token = get_mp_access_token(db)
+    sandbox      = is_mp_sandbox(db)
+    env_label    = "Sandbox 🧪" if sandbox else "Produção 🚀"
 
-    if not api_key:
-        return jsonify({"ok": False, "error": "API Key não configurada."}), 400
+    if not access_token:
+        return jsonify({"ok": False, "error": "Access Token não configurado."}), 400
 
-    # Primeiro testa se o serviço está online (sem auth)
     try:
-        status_resp = http_requests.get(f"{base_url}/status", timeout=10)
-        if not status_resp.ok:
-            return jsonify({"ok": False, "error": f"Serviço NOWPayments offline ({base_url})"}), 502
-    except Exception as e:
-        return jsonify({"ok": False, "error": f"Não foi possível alcançar NOWPayments: {str(e)}"}), 502
-
-    # Agora valida a API Key com endpoint autenticado (/currencies requer auth)
-    try:
-        auth_resp = http_requests.get(
-            f"{base_url}/currencies",
-            headers=nowpayments_headers(api_key),
+        resp = http_requests.get(
+            f"{MP_API_BASE}/users/me",
+            headers=mp_headers(access_token),
             timeout=10
         )
-        auth_data = auth_resp.json()
+        data = resp.json()
+        if not resp.ok:
+            msg = data.get("message", data.get("error", "Token inválido"))
+            return jsonify({"ok": False, "error": f"Token inválido para {env_label}: {msg}"})
 
-        if auth_resp.status_code == 401 or auth_resp.status_code == 403:
-            msg = auth_data.get("message", auth_data.get("error", "Chave inválida"))
-            tip = "sandbox" if not sandbox else "produção"
-            return jsonify({
-                "ok": False,
-                "error": f"API Key inválida para {env_label}. Verifique se está usando a chave do ambiente correto.",
-                "detail": msg,
-                "tip": f"Chaves de Sandbox e Produção são DIFERENTES na NOWPayments. Certifique-se de usar a chave de {env_label}.",
-                "endpoint": base_url
-            }), 200  # 200 para o frontend mostrar a mensagem
-
-        if not auth_resp.ok:
-            return jsonify({
-                "ok": False,
-                "error": f"Erro {auth_resp.status_code}: {auth_data.get('message','Erro desconhecido')}",
-                "endpoint": base_url
-            }), 200
-
-        # Sucesso — mostra quantas moedas estão disponíveis
-        currencies = auth_data.get("currencies", [])
-        count = len(currencies) if isinstance(currencies, list) else "?"
+        nickname = data.get("nickname") or data.get("email") or "OK"
         return jsonify({
             "ok": True,
-            "message": f"✅ API Key válida! Ambiente: {env_label} | {count} moedas disponíveis",
-            "endpoint": base_url
+            "message": f"✅ Token válido! Conta MP: {nickname} | Ambiente: {env_label}",
         })
-
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 502
+
+# ============================================================
+# APPLICANTS — Dono da vaga vê candidatos e seus dados
+# ============================================================
+
+@app.route("/api/jobs/<int:job_id>/applicants")
+@require_auth
+def get_job_applicants(job_id):
+    """Retorna todos os candidatos de uma vaga (apenas para o dono da vaga)."""
+    db   = get_db()
+    user = current_user(db)
+
+    job = db.query(Job).filter_by(id=job_id, owner_id=user.id).first()
+    if not job:
+        return jsonify({"error": "Vaga não encontrada ou sem permissão."}), 404
+
+    applications = db.query(Application).filter_by(job_id=job_id).order_by(Application.applied_at.desc()).all()
+    result = []
+    for appl in applications:
+        candidate = db.query(User).filter_by(id=appl.user_id, is_active=True).first()
+        if not candidate:
+            continue
+        # Conta mensagens não lidas desta candidatura
+        unread = (db.query(Message)
+                  .filter_by(application_id=appl.id, receiver_id=user.id)
+                  .filter(Message.read_at == None).count())
+        result.append({
+            "application_id": appl.id,
+            "status":         appl.status,
+            "cover_note":     appl.cover_note or "",
+            "applied_at":     appl.applied_at.isoformat()+"Z" if appl.applied_at else None,
+            "unread_messages": unread,
+            "candidate": {
+                "id":          candidate.id,
+                "name":        candidate.name,
+                "email":       candidate.email,
+                "role":        candidate.role or "",
+                "bio":         candidate.bio or "",
+                "skills":      candidate.skills or [],
+                "linkedin":    candidate.linkedin or "",
+                "github":      candidate.github or "",
+                "experiences": [e.to_dict() for e in candidate.experiences],
+                "portfolio":   [p.to_dict() for p in candidate.portfolio],
+            }
+        })
+
+    return jsonify({"job": {"id": job.id, "title": job.title},
+                    "applicants": result, "total": len(result)})
+
+
+@app.route("/api/jobs/<int:job_id>/applicants/<int:application_id>/status", methods=["PUT"])
+@require_auth
+def update_application_status(job_id, application_id):
+    """Dono da vaga atualiza status da candidatura."""
+    db   = get_db()
+    user = current_user(db)
+
+    job = db.query(Job).filter_by(id=job_id, owner_id=user.id).first()
+    if not job:
+        return jsonify({"error": "Vaga não encontrada ou sem permissão."}), 404
+
+    appl = db.query(Application).filter_by(id=application_id, job_id=job_id).first()
+    if not appl:
+        return jsonify({"error": "Candidatura não encontrada."}), 404
+
+    d      = request.get_json() or {}
+    status = d.get("status", "")
+    valid  = {"pending", "viewed", "accepted", "rejected"}
+    if status not in valid:
+        return jsonify({"error": f"Status inválido. Use: {', '.join(valid)}"}), 400
+
+    appl.status = status
+    db.commit()
+    return jsonify({"message": "Status atualizado!", "status": appl.status})
+
+
+# ============================================================
+# MESSAGES — Sistema de mensagens entre recrutador e candidato
+# ============================================================
+
+@app.route("/api/messages/conversations", methods=["GET"])
+@require_auth
+def list_conversations():
+    """Lista todas as conversas do usuário logado."""
+    db   = get_db()
+    user = current_user(db)
+
+    # Coleta IDs de candidaturas onde o usuário está envolvido
+    app_ids = set()
+
+    if user.type == "company":
+        owned_jobs = db.query(Job).filter_by(owner_id=user.id).all()
+        for j in owned_jobs:
+            for a in j.applications:
+                app_ids.add(a.id)
+    else:
+        user_apps = db.query(Application).filter_by(user_id=user.id).all()
+        for a in user_apps:
+            app_ids.add(a.id)
+
+    # Inclui candidaturas que já têm mensagens trocadas com o usuário
+    msgs_in = (db.query(Message.application_id)
+               .filter(or_(Message.sender_id == user.id, Message.receiver_id == user.id))
+               .distinct().all())
+    for (aid,) in msgs_in:
+        app_ids.add(aid)
+
+    conversations = []
+    for app_id in app_ids:
+        appl = db.query(Application).filter_by(id=app_id).first()
+        if not appl:
+            continue
+        job = db.query(Job).filter_by(id=appl.job_id).first()
+        if not job:
+            continue
+
+        other_user_id = appl.user_id if user.id == job.owner_id else job.owner_id
+        other_user    = db.query(User).filter_by(id=other_user_id, is_active=True).first()
+
+        last_msg = (db.query(Message).filter_by(application_id=app_id)
+                    .order_by(Message.created_at.desc()).first())
+        unread   = (db.query(Message).filter_by(application_id=app_id, receiver_id=user.id)
+                    .filter(Message.read_at == None).count())
+
+        conversations.append({
+            "application_id": app_id,
+            "job_id":         job.id,
+            "job_title":      job.title,
+            "other_user":     {"id": other_user.id, "name": other_user.name, "role": other_user.role or ""} if other_user else None,
+            "last_message":   last_msg.to_dict() if last_msg else None,
+            "unread":         unread,
+        })
+
+    conversations.sort(
+        key=lambda x: x["last_message"]["created_at"] if x["last_message"] else "",
+        reverse=True
+    )
+    return jsonify({"conversations": conversations})
+
+
+@app.route("/api/messages/<int:application_id>", methods=["GET"])
+@require_auth
+def get_messages(application_id):
+    """Retorna mensagens de uma candidatura (conversa entre recrutador e candidato)."""
+    db   = get_db()
+    user = current_user(db)
+
+    appl = db.query(Application).filter_by(id=application_id).first()
+    if not appl:
+        return jsonify({"error": "Candidatura não encontrada."}), 404
+
+    job = db.query(Job).filter_by(id=appl.job_id).first()
+    if user.id != appl.user_id and (not job or user.id != job.owner_id):
+        return jsonify({"error": "Sem permissão."}), 403
+
+    messages = (db.query(Message).filter_by(application_id=application_id)
+                .order_by(Message.created_at.asc()).all())
+
+    # Marca como lidas
+    for msg in messages:
+        if msg.receiver_id == user.id and not msg.read_at:
+            msg.read_at = datetime.utcnow()
+    db.commit()
+
+    other_user_id = appl.user_id if user.id == job.owner_id else job.owner_id
+    other_user    = db.query(User).filter_by(id=other_user_id, is_active=True).first()
+
+    return jsonify({
+        "application_id": application_id,
+        "job_title":      job.title if job else "",
+        "other_user":     {"id": other_user.id, "name": other_user.name, "role": other_user.role or ""} if other_user else None,
+        "messages":       [m.to_dict() for m in messages],
+    })
+
+
+@app.route("/api/messages", methods=["POST"])
+@require_auth
+def send_message():
+    """Envia mensagem em uma candidatura."""
+    db   = get_db()
+    user = current_user(db)
+    d    = request.get_json() or {}
+
+    application_id = d.get("application_id")
+    content        = (d.get("content") or "").strip()
+
+    if not application_id or not content:
+        return jsonify({"error": "application_id e content são obrigatórios."}), 400
+    if len(content) > 2000:
+        return jsonify({"error": "Mensagem muito longa (máx 2000 caracteres)."}), 400
+
+    appl = db.query(Application).filter_by(id=application_id).first()
+    if not appl:
+        return jsonify({"error": "Candidatura não encontrada."}), 404
+
+    job = db.query(Job).filter_by(id=appl.job_id).first()
+    if user.id != appl.user_id and (not job or user.id != job.owner_id):
+        return jsonify({"error": "Sem permissão."}), 403
+
+    receiver_id = appl.user_id if user.id == job.owner_id else job.owner_id
+
+    msg = Message(sender_id=user.id, receiver_id=receiver_id,
+                  application_id=application_id, content=content)
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+
+    return jsonify({"message": msg.to_dict()}), 201
+
+
+@app.route("/api/messages/unread-count", methods=["GET"])
+@require_auth
+def unread_count():
+    """Retorna número total de mensagens não lidas."""
+    db    = get_db()
+    user  = current_user(db)
+    count = (db.query(Message).filter_by(receiver_id=user.id)
+             .filter(Message.read_at == None).count())
+    return jsonify({"unread": count})
+
 
 # ============================================================
 # RESUMES
