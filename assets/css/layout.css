@@ -735,3 +735,411 @@
   .profile-header { flex-direction: column; }
   .pricing-grid { grid-template-columns: 1fr; }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+ /* =====================================================
+       RESPONSIVE OVERRIDES + HAMBURGER MENU
+       ===================================================== */
+
+    @media (min-width: 769px) {
+
+      /* O container do menu precisa ficar em linha */
+      #nav-links.drawer{
+        position: static;              /* garante que não herde comportamento do mobile */
+        transform: none;
+        visibility: visible;
+        width: auto;
+        height: auto;
+        background: transparent;
+        border: none;
+        box-shadow: none;
+
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 0.6rem;
+
+        padding: 0;                    /* evita “descer” conteúdo */
+        overflow: visible;
+        flex-wrap: nowrap;             /* <<< evita quebrar linha */
+      }
+
+      /* As opções dentro do menu ficam alinhadas em linha também */
+      #nav-links .drawer-content{
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 0.6rem;
+        overflow: visible;
+        flex-wrap: nowrap;             /* <<< evita quebrar */
+        white-space: nowrap;           /* <<< impede quebra em textos */
+        padding: 0;
+      }
+
+      /* Garante que o avatar não vá pra baixo */
+      #nav-links .nav-avatar-wrap{
+        display: flex;
+        align-items: center;
+        flex-shrink: 0;
+      }
+    }
+
+    /* ── Hamburger button ── */
+    .nav-hamburger {
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      gap: 5px;
+      width: 40px;
+      height: 40px;
+      padding: 8px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      z-index: 201;
+      flex-shrink: 0;
+    }
+    .nav-hamburger span {
+      display: block;
+      width: 22px;
+      height: 2px;
+      background: var(--text, #fff);
+      border-radius: 2px;
+      transition: all 0.28s ease;
+      transform-origin: center;
+    }
+    .nav-hamburger.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+    .nav-hamburger.open span:nth-child(2) { opacity: 0; transform: scaleX(0); }
+    .nav-hamburger.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+    /* ── Mobile overlay ── */
+    .mobile-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(4px);
+      z-index: 198;
+    }
+    .mobile-overlay.open { display: block; }
+
+    /* Drawer header hidden on desktop — only visible inside mobile drawer */
+    .drawer-header { display: none !important; }
+    .drawer-close  { display: none !important; }
+
+    /* ── User dropdown menu ── */
+    .nav-avatar-wrap { position: relative; }
+
+    .user-dropdown {
+      position: absolute;
+      top: calc(100% + 10px);
+      right: 0;
+      min-width: 220px;
+      max-height: 320px;
+      background: var(--surface2, #1a1a2e);
+      border: 1px solid var(--border2, rgba(255,255,255,0.1));
+      border-radius: 14px;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.4);
+      z-index: 9999;
+      overflow: hidden;
+
+      animation: dropdownIn .15s ease;
+    }
+    @keyframes dropdownIn {
+      from { opacity:0; transform:translateY(-6px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+    .user-dropdown-header { padding: 1rem 1.1rem 0.85rem; }
+    .user-dropdown-divider {
+      height: 1px;
+      background: var(--border2, rgba(255,255,255,0.08));
+      margin: 0.2rem 0;
+    }
+    .user-dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      width: 100%;
+      padding: 0.65rem 1.1rem;
+      background: none;
+      border: none;
+      color: var(--text2, #ccc);
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      text-align: left;
+      transition: background .12s, color .12s;
+      font-family: inherit;
+    }
+    .user-dropdown-item:hover { background: rgba(255,255,255,0.06); color: var(--text1, #fff); }
+    .user-dropdown-item-danger { color: #f87171 !important; }
+    .user-dropdown-item-danger:hover { background: rgba(248,113,113,0.1) !important; }
+
+    /* =====================================================
+       MOBILE — 768px
+       ===================================================== */
+    @media (max-width: 768px) {
+
+      /* Prevent horizontal scroll from hidden drawer */
+      html, body { overflow-x: hidden; }
+
+      /* Nav */
+      .nav { padding: 0 1rem; }
+      .nav-hamburger { display: flex; }
+
+      /* Nav links become a slide-in drawer from the right */
+      .nav-links {
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: min(320px, 100vw);
+        background: var(--bg3, #0e0e1a);
+        border-left: 1px solid var(--border2, rgba(255,255,255,0.1));
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.15rem;
+        padding: 0 0.75rem 1.5rem;
+        z-index: 200;
+        transform: translateX(100%);
+        transition: transform 0.3s cubic-bezier(.4,0,.2,1);
+        overflow-y: auto;
+        overflow-x: hidden;
+        box-shadow: -8px 0 32px rgba(0,0,0,0.5);
+        visibility: hidden;
+      }
+      .nav-links.open {
+        transform: translateX(0);
+        visibility: visible;
+      }
+
+      .nav-links.drawer {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .drawer-content {
+        flex: 1;
+        overflow-y: auto;
+        padding-bottom: 1rem;
+      }
+
+      .nav-hamburger{
+        border-radius: 10px;
+        transition: background .15s ease, transform .12s ease;
+      }
+      .nav-hamburger:hover{
+        background: rgba(255,255,255,0.06);
+      }
+      .nav-hamburger:active{
+        transform: scale(0.98);
+      }
+      .nav-hamburger:focus-visible{
+        outline: 2px solid rgba(99,102,241,0.55);
+        outline-offset: 2px;
+      }
+
+      /* Drawer header */
+      .drawer-header {
+        display: flex !important;
+        justify-content: space-between;
+        padding: 0 0.25rem;
+        height: 64px;
+        flex-shrink: 0;
+        position: sticky;
+        top: 0;
+        background: var(--bg3, #0e0e1a);
+        z-index: 1;
+        margin: 0 -0.75rem;
+        padding: 0 1rem;
+        border-bottom: 1px solid var(--border2, rgba(255,255,255,0.08));
+        margin-bottom: 0.5rem;
+      }
+
+      .drawer {
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .drawer-content {
+        flex: 1;
+        overflow-y: auto;
+      }
+
+      .drawer-close {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        background: var(--surface, rgba(255,255,255,0.06));
+        border: 1px solid var(--border, rgba(255,255,255,0.1));
+        color: var(--text2, #ccc);
+        font-size: 1rem;
+        cursor: pointer;
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+      }
+      .drawer-divider { display: none; }
+
+      /* Buttons inside drawer go full width */
+      .nav-links .btn-ghost {
+        width: 100%;
+        justify-content: flex-start;
+        padding: 0.65rem 0.85rem;
+        font-size: 0.9rem;
+        border-radius: 8px;
+      }
+      .nav-links .btn-ghost:hover { background: rgba(255,255,255,0.06); }
+
+      .nav-links .btn-primary,
+      .nav-links .btn-secondary {
+        width: 100%;
+        margin-top: 0.25rem;
+        justify-content: center;
+      }
+
+      /* Avatar wrap inside drawer */
+      .nav-avatar-wrap {
+        margin-top: 0.5rem;
+        width: 100%;
+      }
+      .nav-avatar {
+        width: 100%;
+        height: 44px;
+        border-radius: 10px;
+        font-size: 0.9rem;
+        justify-content: center;
+      }
+      /* Dropdown becomes inline inside drawer */
+      .user-dropdown {
+        position: static;
+        animation: none;
+        box-shadow: none;
+        border-radius: 10px;
+        margin-top: 0.5rem;
+        border: 1px solid var(--border, rgba(255,255,255,0.08));
+      }
+
+      /* Sections */
+      .section { padding: 2.5rem 1rem; }
+      .section-sm { padding: 1.5rem 1rem; }
+      .hero { padding: 2.5rem 1rem; min-height: auto; }
+      .hero-stats { gap: 1.5rem; margin-top: 3rem; }
+      .hero-desc { font-size: 1rem; }
+
+      /* Job cards */
+      .job-card {
+        grid-template-columns: auto 1fr;
+        gap: 0.75rem 1rem;
+      }
+      .job-meta { display: none; }
+
+      /* Post job */
+      .post-hero { padding: 1.75rem 1.25rem; }
+      .post-hero h2 { font-size: 1.5rem; }
+
+      /* Portfolio */
+      .portfolio-grid { grid-template-columns: 1fr; }
+
+      /* Cost table */
+      .cost-table-wrap { padding: 1.25rem; }
+
+      /* Modal */
+      .modal { padding: 1.5rem 1.25rem; border-radius: 18px; }
+      .modal-title { font-size: 1.2rem; }
+      .modal-wide { max-width: 100%; }
+
+      /* Profile */
+      .profile-header { flex-direction: column; align-items: stretch; }
+      .profile-grid { grid-template-columns: 1fr; }
+      .profile-credits-box { min-width: auto; }
+      .profile-actions { gap: 0.5rem; }
+      .profile-actions .btn { flex: 1; min-width: calc(50% - 0.25rem); justify-content: center; }
+
+      /* Company panel tabs */
+      .tab-switcher { flex-wrap: wrap; }
+      .tab-btn { flex: none; font-size: 0.78rem; padding: 0.5rem 0.75rem; }
+
+      /* Forms */
+      .form-row { grid-template-columns: 1fr; }
+
+      /* Toast */
+      #toast { bottom: 1rem; right: 1rem; left: 1rem; max-width: none; }
+
+      /* How grid */
+      .how-grid { grid-template-columns: 1fr; gap: 1rem; }
+
+      /* Pricing */
+      .pricing-grid { grid-template-columns: 1fr; }
+
+      /* Admin tabs */
+      #admin-tabs { flex-wrap: wrap; gap: 0.4rem; }
+      #admin-tabs .tab-btn { font-size: 0.78rem; padding: 0.45rem 0.65rem; }
+
+      /* My applications stats */
+      #myapp-stats { grid-template-columns: repeat(2, 1fr); }
+
+      /* Company applicants stats bar */
+      .how-grid#applicants-stats-bar { grid-template-columns: repeat(2, 1fr); }
+
+      /* Candidate profile modal header flex */
+      #candidate-profile-modal > .modal > div:first-of-type { flex-direction: column; }
+    }
+
+    /* =====================================================
+       SMALL MOBILE — 480px
+       ===================================================== */
+    @media (max-width: 480px) {
+      .nav-logo { font-size: 1.2rem; }
+      .hero h1  { font-size: 2rem; letter-spacing: -1px; }
+      .hero-btns { flex-direction: column; align-items: stretch; }
+
+      .section-title { font-size: 1.6rem; }
+
+      /* Job card compact */
+      .job-logo { width: 40px; height: 40px; font-size: 1.2rem; }
+      .job-info h3 { font-size: 0.92rem; }
+      .job-company { font-size: 0.78rem; }
+      .job-tags .tag { font-size: 0.68rem; }
+
+      /* Profile header */
+      .profile-avatar { width: 64px; height: 64px; font-size: 1.5rem; }
+      .profile-name   { font-size: 1.3rem; }
+      .profile-actions .btn { font-size: 0.75rem; padding: 0.4rem 0.5rem; }
+
+      /* Modal full screen on very small */
+      .modal-overlay { padding: 0; align-items: flex-end; }
+      .modal {
+        border-radius: 20px 20px 0 0;
+        max-height: 92vh;
+        width: 100%;
+      }
+
+      /* Company panel job card actions */
+      #company-jobs-list .card > div { flex-direction: column; }
+
+      /* My applications filter buttons wrap */
+      #page-my-applications .btn-sm { font-size: 0.75rem; padding: 0.35rem 0.6rem; }
+
+      /* Stats grid 2 cols */
+      #myapp-stats { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    /* =====================================================
+       TABLET — 1024px
+       ===================================================== */
+    @media (max-width: 1024px) {
+      .profile-grid { grid-template-columns: 1fr; }
+      .how-grid { grid-template-columns: repeat(2, 1fr); }
+    }
