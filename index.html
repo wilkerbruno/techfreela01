@@ -15,6 +15,49 @@
        RESPONSIVE OVERRIDES + HAMBURGER MENU
        ===================================================== */
 
+    @media (min-width: 769px) {
+
+      /* O container do menu precisa ficar em linha */
+      #nav-links.drawer{
+        position: static;              /* garante que não herde comportamento do mobile */
+        transform: none;
+        visibility: visible;
+        width: auto;
+        height: auto;
+        background: transparent;
+        border: none;
+        box-shadow: none;
+
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 0.6rem;
+
+        padding: 0;                    /* evita “descer” conteúdo */
+        overflow: visible;
+        flex-wrap: nowrap;             /* <<< evita quebrar linha */
+      }
+
+      /* As opções dentro do menu ficam alinhadas em linha também */
+      #nav-links .drawer-content{
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 0.6rem;
+        overflow: visible;
+        flex-wrap: nowrap;             /* <<< evita quebrar */
+        white-space: nowrap;           /* <<< impede quebra em textos */
+        padding: 0;
+      }
+
+      /* Garante que o avatar não vá pra baixo */
+      #nav-links .nav-avatar-wrap{
+        display: flex;
+        align-items: center;
+        flex-shrink: 0;
+      }
+    }
+
     /* ── Hamburger button ── */
     .nav-hamburger {
       display: none;
@@ -66,12 +109,14 @@
       top: calc(100% + 10px);
       right: 0;
       min-width: 220px;
+      max-height: 320px;
       background: var(--surface2, #1a1a2e);
       border: 1px solid var(--border2, rgba(255,255,255,0.1));
       border-radius: 14px;
       box-shadow: 0 16px 40px rgba(0,0,0,0.4);
       z-index: 9999;
       overflow: hidden;
+
       animation: dropdownIn .15s ease;
     }
     @keyframes dropdownIn {
@@ -142,6 +187,32 @@
         visibility: visible;
       }
 
+      .nav-links.drawer {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .drawer-content {
+        flex: 1;
+        overflow-y: auto;
+        padding-bottom: 1rem;
+      }
+
+      .nav-hamburger{
+        border-radius: 10px;
+        transition: background .15s ease, transform .12s ease;
+      }
+      .nav-hamburger:hover{
+        background: rgba(255,255,255,0.06);
+      }
+      .nav-hamburger:active{
+        transform: scale(0.98);
+      }
+      .nav-hamburger:focus-visible{
+        outline: 2px solid rgba(99,102,241,0.55);
+        outline-offset: 2px;
+      }
+
       /* Drawer header */
       .drawer-header {
         display: flex !important;
@@ -158,6 +229,18 @@
         border-bottom: 1px solid var(--border2, rgba(255,255,255,0.08));
         margin-bottom: 0.5rem;
       }
+
+      .drawer {
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .drawer-content {
+        flex: 1;
+        overflow-y: auto;
+      }
+
       .drawer-close {
         width: 32px;
         height: 32px;
@@ -342,13 +425,17 @@
   <!-- Mobile overlay -->
   <div class="mobile-overlay" id="mobile-overlay" onclick="App.closeMobileMenu()"></div>
 
-  <div class="nav-links" id="nav-links">
-    <!-- Drawer header -->
-    <div class="drawer-header" id="drawer-header" style="display:none">
-      <div class="nav-logo" onclick="App.goHome();App.closeMobileMenu()">Tech<span>Freela</span></div>
-      <button class="drawer-close" onclick="App.closeMobileMenu()">✕</button>
-    </div>
+  <div class="nav-links drawer" id="nav-links">
+  <!-- Drawer header -->
+  <div class="drawer-header" id="drawer-header" style="display:none">
+    <div class="nav-logo" onclick="App.goHome();App.closeMobileMenu()">Tech<span>Freela</span></div>
+    <button class="drawer-close" onclick="App.closeMobileMenu()">✕</button>
+  </div>
+
+  <!-- Tudo que é opção do menu vai aqui -->
+  <div class="drawer-content">
     <div class="drawer-divider"></div>
+
     <button class="btn btn-ghost" onclick="App.navigate('jobs')">🔍 Vagas</button>
 
     <!-- Apenas para empresas (logadas) -->
@@ -386,7 +473,10 @@
         <button class="user-dropdown-item user-dropdown-item-danger" onclick="App.closeUserMenu();App.doLogout()">🚪 Sair</button>
       </div>
     </div>
-  </div>
+
+  </div><!-- /.drawer-content -->
+</div>
+
 </nav>
 
 
