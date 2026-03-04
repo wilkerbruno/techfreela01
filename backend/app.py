@@ -14,6 +14,7 @@ import os, sys, hashlib, hmac, json, requests as http_requests
 from datetime import datetime, timedelta
 from functools import wraps
 from flask import Flask, request, jsonify, session
+import uuid
 
 try:
     from dotenv import load_dotenv
@@ -159,7 +160,11 @@ def set_admin_config(db, key, value):
         db.add(AdminConfig(key=key, value=value))
 
 def mp_headers(access_token):
-    return {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
+    return {
+        "Authorization":    f"Bearer {access_token}",
+        "Content-Type":     "application/json",
+        "X-Idempotency-Key": str(uuid.uuid4()),
+    }
 
 def get_mp_access_token(db):
     cfg = get_admin_config(db)
@@ -560,7 +565,7 @@ def purchase_credits():
 @app.route("/api/payments/create", methods=["POST"])
 @require_auth
 def create_payment():
-    """Cria preferência de pagamento no Mercado Pago e retorna URL de checkout."""
+    """Cria pagamento PIX via Mercado Pago e retorna QR code para exibir no site."""
     db   = get_db()
     user = current_user(db)
     d    = request.get_json() or {}
@@ -573,48 +578,50 @@ def create_payment():
     if not access_token:
         return jsonify({"error": "Pagamentos não configurados. Contate o administrador."}), 503
 
-    sandbox   = is_mp_sandbox(db)
-    site_url  = request.host_url.rstrip("/")
-    order_id  = f"TF-{user.id}-{int(datetime.utcnow().timestamp())}"
+    order_id = f"TF-{user.id}-{int(datetime.utcnow().timestamp())}"
 
     payload = {
-        "items": [{
-            "id":          pkg["id"],
-            "title":       f"TechFreela — {pkg['credits']} créditos ({pkg['label']})",
-            "quantity":    1,
-            "unit_price":  pkg["price"],
-            "currency_id": "BRL",
-        }],
-        "payer": {"email": user.email},
-        "back_urls": {
-            "success": f"{site_url}/?payment=success",
-            "failure": f"{site_url}/?payment=cancel",
-            "pending": f"{site_url}/?payment=pending",
+        "transaction_amount": float(pkg["price"]),
+        "description":        f"TechFreela — {pkg['credits']} creditos ({pkg['label']})",
+        "payment_method_id":  "pix",
+        "payer": {
+            "email":      user.email,
+            "first_name": user.name.split()[0] if user.name else "Usuario",
+            "last_name":  " ".join(user.name.split()[1:]) if len(user.name.split()) > 1 else "TechFreela",
         },
-        "auto_return":        "approved",
-        "notification_url":   f"{site_url}/api/payments/webhook",
-        "external_reference": order_id,
-        "statement_descriptor": "TechFreela",
+        "external_reference":  order_id,
+        "date_of_expiration":  (datetime.utcnow() + timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M:%S.000-03:00"),
     }
+
+    # Só inclui notification_url se for uma URL pública válida (não localhost)
+    site_url = request.host_url.rstrip("/")
+    host = request.host.split(":")[0].lower()
+    is_public = host not in ("localhost", "127.0.0.1", "0.0.0.0") and "." in host
+    if is_public:
+        payload["notification_url"] = f"{site_url}/api/payments/webhook"
 
     try:
         resp = http_requests.post(
-            f"{MP_API_BASE}/checkout/preferences",
+            f"{MP_API_BASE}/v1/payments",
             json=payload,
             headers=mp_headers(access_token),
-            timeout=15
+            timeout=15,
         )
         resp_data = resp.json()
+
         if not resp.ok:
-            msg = resp_data.get("message", resp_data.get("error", "Erro desconhecido"))
-            return jsonify({"error": f"Erro Mercado Pago: {msg}"}), 502
+            msg   = resp_data.get("message") or resp_data.get("error") or "Erro desconhecido"
+            cause = resp_data.get("cause", [])
+            cause_str = f" {cause}" if cause else ""
+            return jsonify({"error": f"Erro Mercado Pago: {msg}{cause_str}"}), 502
+
     except Exception as e:
         return jsonify({"error": f"Falha de comunicação com gateway: {str(e)}"}), 502
 
-    preference_id        = resp_data.get("id")
-    init_point           = resp_data.get("init_point")
-    sandbox_init_point   = resp_data.get("sandbox_init_point")
-    checkout_url         = sandbox_init_point if sandbox else init_point
+    mp_id     = resp_data.get("id")
+    pix_data  = resp_data.get("point_of_interaction", {}).get("transaction_data", {})
+    qr_base64 = pix_data.get("qr_code_base64", "")
+    qr_code   = pix_data.get("qr_code", "")
 
     pay = Payment(
         user_id=user.id,
@@ -623,66 +630,82 @@ def create_payment():
         amount_brl=str(pkg["price"]),
         payment_method="pix",
         status="pending",
-        invoice_id=preference_id,
-        invoice_url=checkout_url,
+        invoice_id=str(mp_id),
+        invoice_url=None,
     )
+    pay.nowpayments_id = str(mp_id)
     db.add(pay)
     db.commit()
     db.refresh(pay)
 
     return jsonify({
-        "payment_id":    pay.id,
-        "invoice_url":   checkout_url,
-        "preference_id": preference_id,
-        "package":       pkg,
+        "payment_id": pay.id,
+        "mp_id":      mp_id,
+        "qr_code":    qr_code,
+        "qr_base64":  qr_base64,
+        "expires_in": 1800,
+        "package":    pkg,
     }), 201
-
 
 @app.route("/api/payments/<int:payment_id>/status", methods=["GET"])
 @require_auth
 def payment_status(payment_id):
-    """Consulta status do pagamento."""
+    """Consulta status do pagamento PIX junto ao Mercado Pago."""
     db   = get_db()
     user = current_user(db)
     pay  = db.query(Payment).filter_by(id=payment_id, user_id=user.id).first()
     if not pay:
         return jsonify({"error": "Pagamento não encontrado."}), 404
 
+    # Se já está finalizado, retorna direto
     if pay.status == "finished":
-        return jsonify({"status": pay.status, "payment": pay.to_dict(), "balance": user.credits})
+        return jsonify({"status": "finished", "balance": user.credits})
 
-    # Se já temos o MP payment_id, consulta o status diretamente
-    if pay.nowpayments_id:
-        access_token = get_mp_access_token(db)
-        if access_token:
-            try:
-                resp = http_requests.get(
-                    f"{MP_API_BASE}/v1/payments/{pay.nowpayments_id}",
-                    headers=mp_headers(access_token),
-                    timeout=10
+    mp_id = pay.nowpayments_id or pay.invoice_id
+    if not mp_id:
+        return jsonify({"status": pay.status, "balance": user.credits})
+
+    access_token = get_mp_access_token(db)
+    if not access_token:
+        return jsonify({"status": pay.status, "balance": user.credits})
+
+    try:
+        resp = http_requests.get(
+            f"{MP_API_BASE}/v1/payments/{mp_id}",
+            headers=mp_headers(access_token),
+            timeout=10,
+        )
+        if resp.ok:
+            mp_data   = resp.json()
+            mp_status = mp_data.get("status", "")
+
+            STATUS_MAP = {
+                "approved":   "finished",
+                "pending":    "pending",
+                "in_process": "confirming",
+                "rejected":   "failed",
+                "cancelled":  "expired",
+                "refunded":   "refunded",
+            }
+            new_status = STATUS_MAP.get(mp_status, pay.status)
+            pay.status = new_status
+
+            if new_status == "finished" and not pay.paid_at:
+                pay.paid_at = datetime.utcnow()
+                pkg = next((p for p in CREDIT_PACKAGES if p["id"] == pay.package_id), None)
+                label = pkg["label"] if pkg else pay.package_id
+                add_credits(
+                    db, user, pay.credits,
+                    reason=f"Compra {label} ({pay.credits} cr) via PIX",
+                    etype="purchase",
+                    ref=str(mp_id),
                 )
-                if resp.ok:
-                    mp_data = resp.json()
-                    mp_status = mp_data.get("status", "")
-                    status_map = {
-                        "approved": "finished", "pending": "pending",
-                        "in_process": "confirming", "rejected": "failed",
-                        "cancelled": "expired", "refunded": "refunded",
-                    }
-                    new_status = status_map.get(mp_status, pay.status)
-                    pay.status = new_status
-                    if new_status == "finished" and not pay.paid_at:
-                        pay.paid_at = datetime.utcnow()
-                        pkg = next((p for p in CREDIT_PACKAGES if p["id"] == pay.package_id), None)
-                        if pkg:
-                            add_credits(db, user, pay.credits,
-                                        reason=f"Compra {pkg['label']} ({pay.credits} cr)",
-                                        ref=pay.nowpayments_id)
-                    db.commit()
-            except Exception:
-                pass
+            db.commit()
+    except Exception:
+        pass
 
-    return jsonify({"status": pay.status, "payment": pay.to_dict(), "balance": user.credits})
+    return jsonify({"status": pay.status, "balance": user.credits})
+
 
 
 @app.route("/api/payments/webhook", methods=["POST"])

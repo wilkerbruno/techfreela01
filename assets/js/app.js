@@ -7,8 +7,13 @@ const App = (() => {
     if (body) opts.body = JSON.stringify(body);
     try {
       const res  = await fetch(API + path, opts);
-      const data = await res.json();
-      if (!res.ok) throw { status: res.status, message: data.error || "Erro." };
+      const text = await res.text();
+      let data = {};
+      try { data = JSON.parse(text); } catch { /* server returned HTML/text */ }
+      if (!res.ok) {
+        const msg = data.error || (res.status >= 500 ? "Erro interno do servidor." : "Erro na requisição.");
+        throw { status: res.status, message: msg };
+      }
       return data;
     } catch (err) {
       if (err.message && !err.status) throw { message: "Falha de conexão com o servidor." };
@@ -151,58 +156,121 @@ const App = (() => {
   };
 
   // ---- PAYMENT FLOW ----
-  let _payState = { packageId: null, method: "pix", paymentId: null, pollTimer: null };
+  let _payState = {
+    packageId:     null,
+    paymentId:     null,  // ID interno do banco
+    pixCode:       "",    // Chave PIX copia-e-cola
+    pollTimer:     null,
+    timerInterval: null,
+  };
 
   const buyCredits = (amount) => {
     if (!State.isLoggedIn()) { UI.openModal("login-modal"); UI.toastInfo("Faça login."); return; }
     const pkgMap = { 50: "starter", 150: "pro", 400: "business" };
     const pkg = DB.creditPackages.find(x => x.credits === amount);
     _payState.packageId = pkgMap[amount];
-    _payState.method    = "mercado_pago";
 
-    UI.setHtml("pay-pkg-name", `${amount} créditos`);
+    // Reseta o modal para o step inicial
+    _payShowStep("summary");
+    UI.setHtml("pay-pkg-name",  `${amount} créditos`);
     UI.setHtml("pay-pkg-label", pkg ? pkg.label : "Pacote");
     UI.setHtml("pay-pkg-price", `R$ ${pkg ? pkg.price.toFixed(2).replace(".",",") : "—"}`);
-    document.getElementById("pay-status-area").style.display = "none";
-    document.getElementById("btn-confirm-pay").style.display = "";
     document.getElementById("btn-confirm-pay").disabled = false;
-    document.getElementById("btn-confirm-pay").textContent = "⚡ Ir para Pagamento";
+    document.getElementById("btn-confirm-pay").textContent = "⚡ Gerar QR Code PIX";
 
     UI.openModal("payment-modal");
   };
 
-  const selectPayMethod = (method) => { _payState.method = method; };
+  // Mostra só o step desejado, esconde os outros
+  const _payShowStep = (step) => {
+    ["summary","qr","success","error"].forEach(s => {
+      const el = document.getElementById(`pay-step-${s}`);
+      if (el) el.style.display = s === step ? "" : "none";
+    });
+  };
 
   const confirmPayment = async () => {
     const btn = document.getElementById("btn-confirm-pay");
-    btn.textContent = "Criando pagamento…"; btn.disabled = true;
+    btn.textContent = "Gerando QR Code…"; btn.disabled = true;
+
     try {
-      const data = await POST("/api/payments/create", {
-        package_id: _payState.packageId,
-        method: _payState.method,
-      });
+      const data = await POST("/api/payments/create", { package_id: _payState.packageId });
       _payState.paymentId = data.payment_id;
+      _payState.pixCode   = data.qr_code || "";
 
-      // Open checkout in new tab
-      if (data.invoice_url) {
-        window.open(data.invoice_url, "_blank");
+      // Preenche QR Code
+      const img = document.getElementById("pay-qr-img");
+      if (img && data.qr_base64) {
+        img.src = `data:image/png;base64,${data.qr_base64}`;
       }
+      const codeEl = document.getElementById("pay-pix-code");
+      if (codeEl) codeEl.textContent = data.qr_code || "";
 
-      btn.style.display = "none";
-      document.getElementById("pay-status-area").style.display = "block";
-      UI.setHtml("pay-status-msg", "Aguardando confirmação do pagamento…");
+      // Muda para o step do QR
+      _payShowStep("qr");
+      UI.setHtml("pay-status-msg", "Aguardando pagamento…");
 
-      // Poll status
+      // Inicia countdown e polling
+      _startPixTimer(data.expires_in || 1800);
       _pollPayment();
 
     } catch (err) {
-      btn.textContent = "⚡ Ir para Pagamento"; btn.disabled = false;
-      if (err.status === 503) {
-        UI.toastWarn(err.message || "Gateway não configurado.");
-      } else {
-        UI.toastError(err.message || "Erro ao criar pagamento.");
-      }
+      btn.textContent = "⚡ Gerar QR Code PIX"; btn.disabled = false;
+      if (err.status === 503) UI.toastWarn(err.message || "Gateway não configurado.");
+      else                    UI.toastError(err.message || "Erro ao criar pagamento.");
     }
+  };
+
+  const copyPixCode = () => {
+    if (!_payState.pixCode) return;
+    navigator.clipboard.writeText(_payState.pixCode).then(() => {
+      const btn = document.getElementById("btn-copy-pix");
+      if (btn) { btn.textContent = "✅ Copiado!"; setTimeout(() => { btn.textContent = "📋 Copiar"; }, 2000); }
+    }).catch(() => {
+      // Fallback para browsers sem clipboard API
+      const ta = document.createElement("textarea");
+      ta.value = _payState.pixCode;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      UI.toastSuccess("Código PIX copiado!");
+    });
+  };
+
+  const _startPixTimer = (seconds) => {
+    if (_payState.timerInterval) clearInterval(_payState.timerInterval);
+    let remaining = seconds;
+    const el = document.getElementById("pay-timer");
+    const update = () => {
+      const m = String(Math.floor(remaining / 60)).padStart(2, "0");
+      const s = String(remaining % 60).padStart(2, "0");
+      if (el) {
+        el.textContent = `${m}:${s}`;
+        el.style.color = remaining <= 60 ? "#f59e0b" : "var(--accent)";
+      }
+      if (remaining <= 0) {
+        clearInterval(_payState.timerInterval);
+        clearInterval(_payState.pollTimer);
+        _payShowStep("error");
+        const titleEl = document.getElementById("pay-error-title");
+        if (titleEl) titleEl.textContent = "QR Code expirado";
+      }
+      remaining--;
+    };
+    update();
+    _payState.timerInterval = setInterval(update, 1000);
+  };
+
+  const retryPayment = () => {
+    _payShowStep("summary");
+    document.getElementById("btn-confirm-pay").disabled = false;
+    document.getElementById("btn-confirm-pay").textContent = "⚡ Gerar QR Code PIX";
+  };
+
+  const cancelPayment = () => {
+    if (_payState.pollTimer)     clearInterval(_payState.pollTimer);
+    if (_payState.timerInterval) clearInterval(_payState.timerInterval);
   };
 
   const _pollPayment = () => {
@@ -210,44 +278,56 @@ const App = (() => {
     let attempts = 0;
     _payState.pollTimer = setInterval(async () => {
       attempts++;
-      if (attempts > 120) { clearInterval(_payState.pollTimer); return; } // 10 min max
+      if (attempts > 360) { clearInterval(_payState.pollTimer); return; } // 30 min max
       try {
         const data = await GET(`/api/payments/${_payState.paymentId}/status`);
         const s = data.status;
+
         const msgs = {
-          pending:    "⏳ Aguardando abertura do pagamento…",
-          waiting:    "⌛ Aguardando recebimento…",
-          confirming: "🔄 Confirmando na rede…",
-          confirmed:  "✅ Confirmado! Liberando créditos…",
-          finished:   "🎉 Pagamento concluído!",
-          failed:     "❌ Falha no pagamento.",
-          expired:    "⏰ Pagamento expirado.",
+          pending:    "⏳ Aguardando pagamento…",
+          confirming: "🔄 Confirmando…",
+          finished:   "🎉 Pago! Liberando créditos…",
+          failed:     "❌ Pagamento recusado.",
+          expired:    "⏰ PIX expirado.",
           refunded:   "↩️ Reembolsado.",
         };
-        UI.setHtml("pay-status-msg", msgs[s] || `Status: ${s}`);
+        const el = document.getElementById("pay-status-msg");
+        if (el) el.textContent = msgs[s] || `Status: ${s}`;
 
-        if (s === "finished" || s === "confirmed") {
+        if (s === "finished") {
           clearInterval(_payState.pollTimer);
+          clearInterval(_payState.timerInterval);
           State.setCredits(data.balance);
           setTimeout(() => {
-            UI.closeModal("payment-modal");
-            UI.toastSuccess(`💎 Créditos adicionados com sucesso!`);
-          }, 1800);
+            _payShowStep("success");
+            const pkgMap = { starter: 50, pro: 150, business: 400 };
+            const credits = pkgMap[_payState.packageId] || "";
+            const msgEl = document.getElementById("pay-success-msg");
+            if (msgEl) msgEl.textContent = `${credits} créditos adicionados à sua conta!`;
+            UI.toastSuccess("💎 Créditos adicionados com sucesso!");
+          }, 800);
         }
-        if (s === "failed" || s === "expired") {
+
+        if (s === "failed") {
           clearInterval(_payState.pollTimer);
-          document.getElementById("btn-confirm-pay").style.display = "";
-          document.getElementById("btn-confirm-pay").disabled = false;
-          document.getElementById("btn-confirm-pay").textContent = "🔄 Tentar novamente";
-          document.getElementById("pay-status-area").style.display = "none";
+          clearInterval(_payState.timerInterval);
+          _payShowStep("error");
+          const titleEl = document.getElementById("pay-error-title");
+          if (titleEl) titleEl.textContent = "Pagamento recusado";
         }
-      } catch { /* keep polling */ }
+
+        if (s === "expired") {
+          clearInterval(_payState.pollTimer);
+          clearInterval(_payState.timerInterval);
+          _payShowStep("error");
+        }
+
+      } catch { /* continua polling */ }
     }, 5000);
   };
 
   // ---- ADMIN ----
   let _adminTab = "config";
-
 
   const adminUpdateEnv = () => {
     const sandbox = document.querySelector('input[name="adm-sandbox-radio"]:checked')?.value || "true";
@@ -286,7 +366,6 @@ const App = (() => {
       const sbRadio = document.getElementById(sandbox === "true" ? "radio-sandbox" : "radio-prod");
       if (sbRadio) sbRadio.checked = true;
       adminUpdateEnv();
-      // Show preview
       const prevEl = document.getElementById("adm-mp-at-preview");
       if (prevEl && cfg.mp_access_token_preview) {
         prevEl.textContent = `Token salvo: ${cfg.mp_access_token_preview} (${cfg.mp_access_token_len} chars)`;
@@ -361,7 +440,6 @@ const App = (() => {
     const sc=["tag-blue","tag-green","tag-purple","tag-orange","tag-pink"];
     const se=document.getElementById("profile-tags");
     if (se&&user.skills?.length) se.innerHTML=user.skills.map((s,i)=>`<span class="tag ${sc[i%sc.length]}">${UI.esc(s)}</span>`).join("");
-    // Show "Minhas Vagas" button only for companies
     const myJobsBtn = document.getElementById("btn-my-jobs");
     if (myJobsBtn) myJobsBtn.style.display = user.type === "company" ? "" : "none";
     try {
@@ -384,8 +462,8 @@ const App = (() => {
     if (!apps.length) { el.innerHTML=`<div style="text-align:center;padding:1.5rem;color:var(--text3);font-size:0.85rem">Sem candidaturas. <a href="#" onclick="App.navigate('jobs');return false;" style="color:var(--accent)">Explorar →</a></div>`; return; }
     el.innerHTML=apps.map(a=>`<div class="exp-item"><div class="exp-title">${UI.esc(a.job_title||"Vaga")}</div><div class="exp-company">${UI.esc(a.job_company||"")}</div><div style="margin-top:0.4rem"><span class="tag tag-green" style="font-size:0.7rem">✅ Enviada</span><span class="tag tag-gray" style="font-size:0.7rem;margin-left:0.25rem">${UI.esc(a.status||"")}</span></div></div>`).join("");
   };
-  const renderExperienceList = () => { const el=document.getElementById("exp-list"),exps=State.getExperiences(); if(!el)return; el.innerHTML=exps.length?exps.map(e=>UI.renderExpItem(e)).join(""):UI.emptyState("💼","Sem experiências","Adicione sua trajetória."); };
-  const renderPortfolioGrid  = () => { const el=document.getElementById("portfolio-grid"),items=State.getPortfolio(); if(!el)return; el.innerHTML=items.length?items.map(p=>UI.renderPortfolioItem(p)).join(""):UI.emptyState("🗂️","Sem projetos","Adicione seus projetos."); };
+  const renderExperienceList  = () => { const el=document.getElementById("exp-list"),exps=State.getExperiences(); if(!el)return; el.innerHTML=exps.length?exps.map(e=>UI.renderExpItem(e)).join(""):UI.emptyState("💼","Sem experiências","Adicione sua trajetória."); };
+  const renderPortfolioGrid   = () => { const el=document.getElementById("portfolio-grid"),items=State.getPortfolio(); if(!el)return; el.innerHTML=items.length?items.map(p=>UI.renderPortfolioItem(p)).join(""):UI.emptyState("🗂️","Sem projetos","Adicione seus projetos."); };
   const renderAppliedJobsList = () => { const el=document.getElementById("applied-jobs-list"),applied=State.getApplied(); if(!el)return; if(!applied.length){el.innerHTML=`<div style="text-align:center;padding:1.5rem;color:var(--text3);font-size:0.85rem">Sem candidaturas.<a href="#" onclick="App.navigate('jobs');return false;" style="color:var(--accent)"> Explorar →</a></div>`;return;} el.innerHTML=applied.map(id=>{const j=DB.getJobById(id);return j?UI.renderAppliedJob(j):""}).filter(Boolean).join(""); };
 
   const openEditProfile = () => {
@@ -449,10 +527,8 @@ const App = (() => {
     UI.openModal("chat-modal");
     await _loadChatMessages();
 
-    // Poll for new messages every 5s
     _chatState.pollTimer = setInterval(_loadChatMessages, 5000);
 
-    // Stop polling when modal closes
     document.getElementById("chat-modal").addEventListener("click", function handler(e) {
       if (e.target === this) { clearInterval(_chatState.pollTimer); this.removeEventListener("click", handler); }
     });
@@ -481,7 +557,6 @@ const App = (() => {
       }).join("") : `<div style="text-align:center;color:var(--text3);font-size:0.85rem;margin:auto">Nenhuma mensagem ainda. Diga olá! 👋</div>`;
 
       if (wasAtBottom) container.scrollTop = container.scrollHeight;
-      // Update unread count
       loadUnreadCount();
     } catch { /* keep going */ }
   };
@@ -538,7 +613,6 @@ const App = (() => {
       const nameEl = document.getElementById("company-panel-title");
       if (nameEl) nameEl.textContent = `Vagas de ${user.name}`;
     }
-    // Load jobs into cache
     try {
       const data = await GET("/api/jobs/mine");
       _cpanel.jobs = data.jobs || [];
@@ -615,7 +689,6 @@ const App = (() => {
     UI.setVal("ej-stack",    (j.stack||[]).join(", "));
     UI.setVal("ej-desc",     j.desc || j.description || "");
     UI.setVal("ej-reqs",     (j.reqs||j.requirements||[]).join("\n"));
-    // Set selects
     const typeEl = document.getElementById("ej-type"); if (typeEl) typeEl.value = j.type || "PJ";
     const modeEl = document.getElementById("ej-mode"); if (modeEl) modeEl.value = j.mode || "Remoto";
     const lvlEl  = document.getElementById("ej-level"); if (lvlEl) lvlEl.value  = j.level || "A combinar";
@@ -642,7 +715,6 @@ const App = (() => {
       const data = await PUT(`/api/jobs/${jobId}`, payload);
       UI.toastSuccess("Vaga atualizada! ✅");
       UI.closeModal("edit-job-modal");
-      // Refresh jobs
       const r = await GET("/api/jobs/mine");
       _cpanel.jobs = r.jobs || [];
       renderCompanyJobs();
@@ -745,9 +817,7 @@ const App = (() => {
       return `
       <div class="card card-hover" style="margin-bottom:0.85rem;padding:1.25rem 1.5rem;cursor:pointer" onclick="App.openCandidateProfile(${a.application_id})">
         <div style="display:flex;align-items:flex-start;gap:1rem;flex-wrap:wrap">
-          <!-- Avatar -->
           <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#8b5cf6);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1rem;color:#000;flex-shrink:0">${initials}</div>
-          <!-- Info -->
           <div style="flex:1;min-width:180px">
             <div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;margin-bottom:0.2rem">
               <span style="font-weight:700;font-size:0.97rem;color:var(--text1)">${UI.esc(c.name)}</span>
@@ -758,7 +828,6 @@ const App = (() => {
             ${c.bio?`<div style="font-size:0.8rem;color:var(--text3);line-height:1.4;margin-bottom:0.5rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${UI.esc(c.bio)}</div>`:''}
             ${skills?`<div style="display:flex;flex-wrap:wrap;gap:0.3rem">${skills}</div>`:''}
           </div>
-          <!-- Actions -->
           <div style="display:flex;flex-direction:column;gap:0.5rem;align-items:flex-end" onclick="event.stopPropagation()">
             <button class="btn btn-sm btn-primary" onclick="App.openCandidateProfile(${a.application_id})">👁️ Ver Perfil</button>
             <button class="btn btn-sm btn-secondary" onclick="App.openChat(${a.application_id},'${UI.esc(c.name)}')">
@@ -796,7 +865,6 @@ const App = (() => {
     UI.setText("cpm-name",   c.name);
     UI.setText("cpm-role",   c.role || "Desenvolvedor");
 
-    // Links
     const linksEl = document.getElementById("cpm-links");
     if (linksEl) {
       linksEl.innerHTML = [
@@ -806,16 +874,13 @@ const App = (() => {
       ].filter(Boolean).join(" <span style='color:var(--border2)'>·</span> ");
     }
 
-    // Bio
     const bioEl = document.getElementById("cpm-bio");
     if (bioEl) bioEl.textContent = c.bio || "Sem bio informada.";
 
-    // Skills
     const sc = ["tag-blue","tag-green","tag-purple","tag-orange","tag-pink"];
     const skillsEl = document.getElementById("cpm-skills");
     if (skillsEl) skillsEl.innerHTML = (c.skills||[]).map((s,i)=>`<span class="tag ${sc[i%sc.length]}">${UI.esc(s)}</span>`).join("") || '<span style="color:var(--text3);font-size:0.82rem">Sem habilidades informadas.</span>';
 
-    // Cover note
     const coverBlock = document.getElementById("cpm-cover-block");
     const coverEl    = document.getElementById("cpm-cover");
     if (coverBlock && coverEl) {
@@ -823,7 +888,6 @@ const App = (() => {
       else coverBlock.style.display = "none";
     }
 
-    // Experiences
     const expEl = document.getElementById("cpm-experiences");
     if (expEl) {
       expEl.innerHTML = (c.experiences||[]).length
@@ -837,7 +901,6 @@ const App = (() => {
         : '<p style="color:var(--text3);font-size:0.82rem">Sem experiências informadas.</p>';
     }
 
-    // Portfolio
     const portEl = document.getElementById("cpm-portfolio");
     if (portEl) {
       portEl.innerHTML = (c.portfolio||[]).length
@@ -852,16 +915,13 @@ const App = (() => {
         : '<p style="color:var(--text3);font-size:0.82rem">Sem projetos no portfólio.</p>';
     }
 
-    // Status selector
     const statusSel = document.getElementById("cpm-status-sel");
     if (statusSel) statusSel.value = a.status || "pending";
 
-    // Message button
     const msgBtn = document.getElementById("cpm-msg-btn");
     if (msgBtn) msgBtn.onclick = () => { UI.closeModal("candidate-profile-modal"); openChat(applicationId, c.name); };
 
     UI.openModal("candidate-profile-modal");
-    // Mark as viewed if pending
     if (a.status === "pending") {
       updateApplicationStatus(_cpanel.currentJobId, applicationId, "viewed").catch(()=>{});
       a.status = "viewed";
@@ -872,7 +932,6 @@ const App = (() => {
     const { applicationId, jobId } = _profileCtx;
     if (!applicationId) return;
     await updateApplicationStatus(jobId, applicationId, status);
-    // Update local cache
     const a = _cpanel.allApplicants.find(x => x.application_id === applicationId);
     if (a) a.status = status;
   };
@@ -927,8 +986,6 @@ const App = (() => {
     return d.toLocaleDateString("pt-BR");
   };
 
-  // ── initEvents & checkSession ──────────────────────────────
-
   // ============================================================
   // MY APPLICATIONS — página de candidaturas para devs
   // ============================================================
@@ -941,7 +998,6 @@ const App = (() => {
       const data = await GET("/api/profile");
       _myApps = data.applications || [];
       _renderMyApplications(_myApps);
-      // stats
       UI.setText("myapp-stat-total",    _myApps.length);
       UI.setText("myapp-stat-pending",  _myApps.filter(a=>a.status==="pending"||a.status==="viewed").length);
       UI.setText("myapp-stat-accepted", _myApps.filter(a=>a.status==="accepted").length);
@@ -1020,7 +1076,6 @@ const App = (() => {
     const dd = document.getElementById("user-dropdown");
     if (!dd) return;
     dd.style.display = dd.style.display === "none" ? "" : "none";
-    // Refresh credits in dropdown
     const credEl = document.getElementById("ud-credits");
     if (credEl) credEl.textContent = `💎 ${State.getCredits()} créditos`;
   };
@@ -1054,7 +1109,6 @@ const App = (() => {
         UI.setText("nav-avatar", initials);
         UI.setText("credits-val", State.getCredits());
 
-        // Populate dropdown info
         if (el("ud-name"))    el("ud-name").textContent    = user.name;
         if (el("ud-email"))   el("ud-email").textContent   = user.email || "";
         if (el("ud-credits")) el("ud-credits").textContent = `💎 ${State.getCredits()} créditos`;
@@ -1065,7 +1119,6 @@ const App = (() => {
         if (el("nav-company-btn"))      el("nav-company-btn").style.display      = (isCompany || isAdmin) ? "" : "none";
         if (el("nav-post-job-btn"))     el("nav-post-job-btn").style.display     = (isCompany || isAdmin) ? "" : "none";
         if (el("nav-applications-btn")) el("nav-applications-btn").style.display = (!isCompany || isAdmin) ? "" : "none";
-        // Dropdown buttons
         if (el("ud-btn-company"))       el("ud-btn-company").style.display       = (isCompany || isAdmin) ? "" : "none";
         if (el("ud-btn-applications"))  el("ud-btn-applications").style.display  = (!isCompany || isAdmin) ? "" : "none";
         if (el("ud-btn-admin"))         el("ud-btn-admin").style.display         = isAdmin ? "" : "none";
@@ -1079,13 +1132,11 @@ const App = (() => {
       }
     });
 
-    // Close dropdown when clicking outside
     document.addEventListener("click", (e) => {
       const wrap = document.getElementById("nav-avatar-wrap");
       if (wrap && !wrap.contains(e.target)) closeUserMenu();
     });
 
-    // Close mobile menu on resize to desktop
     window.addEventListener("resize", () => {
       if (window.innerWidth > 768) closeMobileMenu();
     });
@@ -1104,7 +1155,8 @@ const App = (() => {
 
   return {
     init, navigate, goHome, filterJobs, viewJob, applyJob, postJob, renderPostJobCreditsInfo,
-    doLogin, doRegister, doLogout, switchRegisterTab, buyCredits, selectPayMethod, confirmPayment,
+    doLogin, doRegister, doLogout, switchRegisterTab,
+    buyCredits, confirmPayment, copyPixCode, cancelPayment, retryPayment,
     openEditProfile, saveProfile, addPortfolio, addExperience, renderProfilePage,
     adminTab, adminSaveConfig, adminTestConnection, adminUpdateEnv,
     openMyJobs, openApplicants, updateApplicationStatus,
