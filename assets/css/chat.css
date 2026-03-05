@@ -286,6 +286,75 @@
 }
 .fm-send-btn:hover { opacity: 0.85; }
 
+
+/* ── Arquivo / Mídia no chat ── */
+.fm-attach-btn {
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+.fm-attach-btn:hover { opacity: 1; }
+
+.fm-file-preview {
+  padding: 4px 10px 0;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.fm-file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 20px;
+  padding: 3px 10px;
+  font-size: 0.75rem;
+  color: var(--text2, #9ca3af);
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm-img-preview {
+  max-width: 200px;
+  max-height: 160px;
+  border-radius: 8px;
+  display: block;
+  cursor: pointer;
+  object-fit: cover;
+}
+.fm-video-preview {
+  max-width: 220px;
+  max-height: 160px;
+  border-radius: 8px;
+  display: block;
+}
+.fm-file-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 0.78rem;
+  color: var(--accent, #00d4ff);
+  text-decoration: none;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fm-file-link:hover { background: rgba(255,255,255,0.12); }
+
 /* ---------- Responsivo ---------- */
 @media (max-width: 768px) {
   #fm-widget { right: 0; left: 0; justify-content: flex-end; }

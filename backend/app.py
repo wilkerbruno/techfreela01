@@ -15,6 +15,13 @@ from datetime import datetime, timedelta
 from functools import wraps
 from flask import Flask, request, jsonify, session
 import uuid
+from werkzeug.utils import secure_filename
+
+
+UPLOAD_FOLDER   = os.path.join(os.path.dirname(__file__), "uploads")
+ALLOWED_EXTENSIONS = True  # aceita tudo
+MAX_FILE_BYTES  = 100 * 1024 * 1024  # 100MB
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 try:
     from dotenv import load_dotenv
@@ -49,8 +56,8 @@ from models.database import Base, User, Job, Experience, PortfolioItem, Applicat
 
 DATABASE_URL = os.environ.get(
     "DATABASE_URL",
-    "mysql+pymysql://root:UEgcKqkJhSyRgJHqiaoUwuaunXNWLTnH"
-    "@shortline.proxy.rlwy.net:41195/railway?charset=utf8mb4"
+    "mysql+pymysql://mysql:d8f0525bbe9dea9e3097"
+    "@easypanel.pontocomdesconto.com.br:3307/techfreela?charset=utf8mb4"
 )
 
 CREDIT_COSTS    = {"view_job": 2, "apply_job": 5, "post_job": 20, "view_resume": 3}
@@ -85,7 +92,7 @@ try:
                            pool_size=5, max_overflow=10, echo=False)
     with engine.connect() as c:
         ver = c.execute(text("SELECT VERSION()")).fetchone()[0]
-    print(f"✓ MySQL Railway conectado! Versão: {ver}")
+    print(f"✓ MySQL conectado! Versão: {ver}")
 except Exception as e:
     sys.exit(f"✗ Falha na conexão MySQL: {e}")
 
@@ -382,7 +389,6 @@ def update_job(job_id):
     d = request.get_json() or {}
     for field in ["title","company","salary","location","area","level","description"]:
         if field in d and str(d[field]).strip():
-            # map "description" -> desc column
             col = "description" if field == "description" else field
             setattr(job, col, str(d[field]).strip())
 
@@ -711,7 +717,6 @@ def payment_status(payment_id):
 @app.route("/api/payments/webhook", methods=["POST"])
 def payment_webhook():
     """Webhook do Mercado Pago — credita o usuário após pagamento aprovado."""
-    # MP envia como query params ou no body JSON
     topic      = request.args.get("topic") or request.args.get("type")
     mp_pay_id  = request.args.get("id")
 
@@ -720,7 +725,6 @@ def payment_webhook():
         mp_pay_id = str(data.get("data", {}).get("id", ""))
         topic = data.get("type", topic)
 
-    # Ignorar notificações que não são de pagamento
     if topic not in ("payment", "merchant_order", None):
         return jsonify({"ok": True}), 200
 
@@ -732,7 +736,6 @@ def payment_webhook():
     if not access_token:
         return jsonify({"ok": False}), 503
 
-    # Busca detalhes do pagamento no MP
     try:
         resp = http_requests.get(
             f"{MP_API_BASE}/v1/payments/{mp_pay_id}",
@@ -748,7 +751,6 @@ def payment_webhook():
     mp_status    = mp_data.get("status", "")
     external_ref = mp_data.get("external_reference", "")
 
-    # Localiza o pagamento pelo external_reference (TF-{user_id}-{ts})
     pay = None
     if external_ref.startswith("TF-"):
         try:
@@ -777,7 +779,7 @@ def payment_webhook():
     }
     new_status = status_map.get(mp_status, "pending")
     pay.status        = new_status
-    pay.nowpayments_id = str(mp_pay_id)   # reutiliza campo para guardar MP payment id
+    pay.nowpayments_id = str(mp_pay_id)
 
     if new_status == "finished" and not pay.paid_at:
         pay.paid_at = datetime.utcnow()
@@ -813,7 +815,6 @@ def admin_get_config():
     db  = get_db()
     cfg = get_admin_config(db)
     safe = dict(cfg)
-    # Mask access token
     for secret_key in ("mp_access_token", "mp_public_key"):
         if safe.get(secret_key):
             k = safe[secret_key]
@@ -933,7 +934,6 @@ def get_job_applicants(job_id):
         candidate = db.query(User).filter_by(id=appl.user_id, is_active=True).first()
         if not candidate:
             continue
-        # Conta mensagens não lidas desta candidatura
         unread = (db.query(Message)
                   .filter_by(application_id=appl.id, receiver_id=user.id)
                   .filter(Message.read_at == None).count())
@@ -998,7 +998,6 @@ def list_conversations():
     db   = get_db()
     user = current_user(db)
 
-    # Coleta IDs de candidaturas onde o usuário está envolvido
     app_ids = set()
 
     if user.type == "company":
@@ -1011,7 +1010,6 @@ def list_conversations():
         for a in user_apps:
             app_ids.add(a.id)
 
-    # Inclui candidaturas que já têm mensagens trocadas com o usuário
     msgs_in = (db.query(Message.application_id)
                .filter(or_(Message.sender_id == user.id, Message.receiver_id == user.id))
                .distinct().all())
@@ -1069,7 +1067,6 @@ def get_messages(application_id):
     messages = (db.query(Message).filter_by(application_id=application_id)
                 .order_by(Message.created_at.asc()).all())
 
-    # Marca como lidas
     for msg in messages:
         if msg.receiver_id == user.id and not msg.read_at:
             msg.read_at = datetime.utcnow()
@@ -1096,10 +1093,13 @@ def send_message():
 
     application_id = d.get("application_id")
     content        = (d.get("content") or "").strip()
+    file_url       = d.get("file_url") or None
+    file_name      = d.get("file_name") or None
+    file_type      = d.get("file_type") or None
 
-    if not application_id or not content:
-        return jsonify({"error": "application_id e content são obrigatórios."}), 400
-    if len(content) > 2000:
+    if not application_id or (not content and not file_url):
+        return jsonify({"error": "application_id e content (ou arquivo) são obrigatórios."}), 400
+    if content and len(content) > 2000:
         return jsonify({"error": "Mensagem muito longa (máx 2000 caracteres)."}), 400
 
     appl = db.query(Application).filter_by(id=application_id).first()
@@ -1113,12 +1113,52 @@ def send_message():
     receiver_id = appl.user_id if user.id == job.owner_id else job.owner_id
 
     msg = Message(sender_id=user.id, receiver_id=receiver_id,
-                  application_id=application_id, content=content)
+                  application_id=application_id, content=content or None,
+                  file_url=file_url, file_name=file_name, file_type=file_type)
     db.add(msg)
     db.commit()
     db.refresh(msg)
 
     return jsonify({"message": msg.to_dict()}), 201
+
+
+@app.route("/api/messages/upload", methods=["POST"])
+@require_auth
+def upload_message_file():
+    """Faz upload de arquivo para uso em mensagem."""
+    if "file" not in request.files:
+        return jsonify({"error": "Nenhum arquivo enviado."}), 400
+    f = request.files["file"]
+    if not f.filename:
+        return jsonify({"error": "Nome de arquivo inválido."}), 400
+
+    f.seek(0, 2)
+    size = f.tell()
+    f.seek(0)
+    if size > MAX_FILE_BYTES:
+        return jsonify({"error": "Arquivo muito grande (máx 100MB)."}), 400
+
+    ext      = os.path.splitext(secure_filename(f.filename))[1].lower()
+    uid_name = f"{uuid.uuid4().hex}{ext}"
+    save_path = os.path.join(UPLOAD_FOLDER, uid_name)
+    f.save(save_path)
+
+    file_url  = f"/api/messages/files/{uid_name}"
+    file_type = f.content_type or "application/octet-stream"
+
+    return jsonify({
+        "file_url":  file_url,
+        "file_name": f.filename,
+        "file_type": file_type,
+    }), 201
+
+
+@app.route("/api/messages/files/<path:filename>", methods=["GET"])
+@require_auth
+def serve_message_file(filename):
+    """Serve arquivos de mensagens (somente usuários autenticados)."""
+    from flask import send_from_directory
+    return send_from_directory(UPLOAD_FOLDER, filename)
 
 
 @app.route("/api/messages/unread-count", methods=["GET"])
@@ -1211,7 +1251,7 @@ def server_error(e):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     print(f"\n{'='*50}")
-    print(f"  TechFreela API — Flask + MySQL Railway")
+    print(f"  TechFreela API — Flask + MySQL")
     print(f"  http://127.0.0.1:{port}")
     print(f"{'='*50}\n")
     app.run(debug=True, host="0.0.0.0", port=port)

@@ -830,7 +830,7 @@ const App = (() => {
           </div>
           <div style="display:flex;flex-direction:column;gap:0.5rem;align-items:flex-end" onclick="event.stopPropagation()">
             <button class="btn btn-sm btn-primary" onclick="App.openCandidateProfile(${a.application_id})">👁️ Ver Perfil</button>
-            <button class="btn btn-sm btn-secondary" onclick="App.openChat(${a.application_id},'${UI.esc(c.name)}')">
+            <button class="btn btn-sm btn-secondary" onclick="FM.open();FM.openChat(${a.application_id},'${UI.esc(c.name)}','${UI.esc(_cpanel.currentJobTitle)}')">
               💬 Mensagem${a.unread_messages>0?` (${a.unread_messages})`:''}
             </button>
             <select class="form-select" style="font-size:0.75rem;padding:0.3rem 0.5rem" onchange="App.updateApplicationStatus(${_cpanel.currentJobId},${a.application_id},this.value)" onclick="event.stopPropagation()">
@@ -919,7 +919,7 @@ const App = (() => {
     if (statusSel) statusSel.value = a.status || "pending";
 
     const msgBtn = document.getElementById("cpm-msg-btn");
-    if (msgBtn) msgBtn.onclick = () => { UI.closeModal("candidate-profile-modal"); openChat(applicationId, c.name); };
+    if (msgBtn) msgBtn.onclick = () => { UI.closeModal("candidate-profile-modal"); FM.open(); FM.openChat(applicationId, c.name, _cpanel.currentJobTitle); };
 
     UI.openModal("candidate-profile-modal");
     if (a.status === "pending") {

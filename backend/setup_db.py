@@ -48,8 +48,8 @@ except ImportError:
 # ============================================================
 
 DATABASE_URL = (
-    "mysql+pymysql://root:UEgcKqkJhSyRgJHqiaoUwuaunXNWLTnH"
-    "@shortline.proxy.rlwy.net:41195/railway"
+    "mysql+pymysql://mysql:d8f0525bbe9dea9e3097"
+    "@easypanel.pontocomdesconto.com.br:3307/techfreela"
     "?charset=utf8mb4"
 )
 

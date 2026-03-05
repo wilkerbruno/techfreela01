@@ -220,7 +220,10 @@ class Message(Base):
     sender_id      = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     receiver_id    = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     application_id = Column(Integer, ForeignKey("applications.id", ondelete="CASCADE"), nullable=False)
-    content        = Column(Text, nullable=False)
+    content        = Column(Text, nullable=True)        # ← nullable=True (pode ser só arquivo)
+    file_url       = Column(String(500), nullable=True) # ← novo
+    file_name      = Column(String(255), nullable=True) # ← novo
+    file_type      = Column(String(100), nullable=True) # ← novo (mime type)
     read_at        = Column(DateTime, nullable=True)
     created_at     = Column(DateTime, nullable=False, default=datetime.utcnow)
 
@@ -234,7 +237,10 @@ class Message(Base):
             "sender_id": self.sender_id,
             "receiver_id": self.receiver_id,
             "application_id": self.application_id,
-            "content": self.content,
+            "content": self.content or "",
+            "file_url": self.file_url,
+            "file_name": self.file_name,
+            "file_type": self.file_type,
             "read_at": self.read_at.isoformat()+"Z" if self.read_at else None,
             "created_at": self.created_at.isoformat()+"Z" if self.created_at else None,
         }

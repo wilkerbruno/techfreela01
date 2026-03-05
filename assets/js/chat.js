@@ -144,11 +144,14 @@ const FM = (() => {
         <div class="fm-empty">Carregando…</div>
       </div>
       <div class="fm-chat-input-row" id="fm-input-row-${applicationId}">
+        <input type="file" id="fm-file-${applicationId}" style="display:none" onchange="FM.handleFileSelect(${applicationId},this)">
+        <button class="fm-attach-btn" title="Anexar arquivo" onclick="document.getElementById('fm-file-${applicationId}').click()">📎</button>
         <textarea class="fm-chat-input" id="fm-input-${applicationId}" placeholder="Escreva uma mensagem…" rows="1"
           onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();FM.sendMsg(${applicationId})}"
           oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,80)+'px'"></textarea>
         <button class="fm-send-btn" onclick="FM.sendMsg(${applicationId})">➤</button>
-      </div>`;
+      </div>
+      <div class="fm-file-preview" id="fm-file-preview-${applicationId}" style="display:none"></div>`;
     wrap.appendChild(div);
   };
 
@@ -166,8 +169,22 @@ const FM = (() => {
       el.innerHTML = msgs.length ? msgs.map(m => {
         const isMe = m.sender_id === _myId;
         const time = m.created_at ? new Date(m.created_at).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}) : "";
+        let fileHtml = "";
+        if (m.file_url) {
+          const mt = m.file_type || "";
+          if (mt.startsWith("image/")) {
+            fileHtml = `<a href="${m.file_url}" target="_blank"><img src="${m.file_url}" class="fm-img-preview" alt="${_esc(m.file_name||'imagem')}"></a>`;
+          } else if (mt.startsWith("video/")) {
+            fileHtml = `<video src="${m.file_url}" class="fm-video-preview" controls></video>`;
+          } else {
+            fileHtml = `<a href="${m.file_url}" target="_blank" class="fm-file-link" download="${_esc(m.file_name||'arquivo')}">${_fileIcon(mt)} ${_esc(m.file_name||'arquivo')}</a>`;
+          }
+        }
         return `<div class="fm-msg-row ${isMe ? 'me' : 'them'}">
-          <div class="fm-bubble">${_esc(m.content)}</div>
+          <div class="fm-bubble">
+            ${fileHtml}
+            ${m.content ? `<span>${_esc(m.content)}</span>` : ""}
+          </div>
           <div class="fm-msg-time">${time}</div>
         </div>`;
       }).join("") : `<div class="fm-empty">Nenhuma mensagem ainda. Diga olá! 👋</div>`;
@@ -176,23 +193,87 @@ const FM = (() => {
     } catch {}
   };
 
+  // ── Arquivo pendente por chat ──
+  const _pendingFiles = {};
+
+  const handleFileSelect = (applicationId, input) => {
+    const file = input.files[0];
+    if (!file) return;
+    _pendingFiles[applicationId] = file;
+    const preview = document.getElementById(`fm-file-preview-${applicationId}`);
+    if (preview) {
+      preview.style.display = "flex";
+      preview.innerHTML = `
+        <span class="fm-file-chip">
+          ${_fileIcon(file.type)} ${_esc(file.name)}
+          <button onclick="FM.clearFile(${applicationId})" style="background:none;border:none;color:inherit;cursor:pointer;margin-left:4px;font-size:0.85rem">✕</button>
+        </span>`;
+    }
+    input.value = "";
+  };
+
+  const clearFile = (applicationId) => {
+    delete _pendingFiles[applicationId];
+    const preview = document.getElementById(`fm-file-preview-${applicationId}`);
+    if (preview) { preview.style.display = "none"; preview.innerHTML = ""; }
+  };
+
+  const _fileIcon = (mimeType) => {
+    if (!mimeType) return "📄";
+    if (mimeType.startsWith("image/")) return "🖼️";
+    if (mimeType.startsWith("video/")) return "🎬";
+    if (mimeType.startsWith("audio/")) return "🎵";
+    if (mimeType.includes("pdf"))      return "📑";
+    if (mimeType.includes("zip") || mimeType.includes("rar")) return "🗜️";
+    return "📄";
+  };
+
   // ── Envia mensagem ──
   const sendMsg = async (applicationId) => {
-    const inp = document.getElementById(`fm-input-${applicationId}`);
+    const inp     = document.getElementById(`fm-input-${applicationId}`);
     const content = (inp?.value || "").trim();
-    if (!content) return;
-    inp.value = "";
-    inp.style.height = "auto";
+    const file    = _pendingFiles[applicationId];
+
+    if (!content && !file) return;
+
+    // Desabilita botão temporariamente
+    const sendBtn = document.querySelector(`#fm-chat-${applicationId} .fm-send-btn`);
+    if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = "…"; }
+
+    if (inp) { inp.value = ""; inp.style.height = "auto"; }
+
+    let fileUrl = null, fileName = null, fileType = null;
+
+    // Upload do arquivo se houver
+    if (file) {
+      clearFile(applicationId);
+      try {
+        const form = new FormData();
+        form.append("file", file);
+        const res  = await fetch(`${window.location.origin}/api/messages/upload`, {
+          method: "POST", credentials: "include", body: form,
+        });
+        if (res.ok) {
+          const data = await res.json();
+          fileUrl  = data.file_url;
+          fileName = data.file_name;
+          fileType = data.file_type;
+        }
+      } catch { /* continua sem arquivo se upload falhar */ }
+    }
+
     try {
       await fetch(`${window.location.origin}/api/messages`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ application_id: applicationId, content }),
+        body: JSON.stringify({ application_id: applicationId, content, file_url: fileUrl, file_name: fileName, file_type: fileType }),
       });
       await _loadChatMsgs(applicationId);
       loadConvs();
     } catch {}
+
+    if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = "➤"; }
   };
 
   // ── Minimiza/expande janela de chat ──
@@ -238,7 +319,11 @@ const FM = (() => {
   // Esconde o widget inicialmente (aparece só após login)
   document.getElementById("fm-widget").style.display = "none";
 
-  return { init, loadConvs, openChat, closeChat, toggleChat, toggleConversations, filterConvs, sendMsg };
+  const open = () => {
+    if (!_convOpen) toggleConversations();
+  };
+
+  return { init, loadConvs, openChat, closeChat, toggleChat, toggleConversations, filterConvs, sendMsg, handleFileSelect, clearFile, open };
 })();
 
 // Inicializa o FM junto com o App
