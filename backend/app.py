@@ -16,6 +16,7 @@ from functools import wraps
 from flask import Flask, request, jsonify, session
 import uuid
 from werkzeug.utils import secure_filename
+import base64
 
 
 UPLOAD_FOLDER   = os.path.join(os.path.dirname(__file__), "uploads")
@@ -503,27 +504,33 @@ def update_profile():
 @app.route("/api/profile/avatar", methods=["POST"])
 @require_auth
 def upload_avatar():
-    """Upload de foto de perfil do usuário."""
+    """Upload de foto de perfil — salva como base64 no banco (persiste entre redeploys)."""
     db   = get_db()
     user = current_user(db)
 
     if "avatar" not in request.files:
         return jsonify({"error": "Nenhuma imagem enviada."}), 400
+
     f = request.files["avatar"]
     if not f.filename:
         return jsonify({"error": "Nome de arquivo inválido."}), 400
-    if not f.content_type.startswith("image/"):
-        return jsonify({"error": "Envie apenas imagens."}), 400
+    if not f.content_type or not f.content_type.startswith("image/"):
+        return jsonify({"error": "Envie apenas imagens (jpg, png, webp...)."}), 400
 
-    f.seek(0, 2); size = f.tell(); f.seek(0)
-    if size > 5 * 1024 * 1024:
-        return jsonify({"error": "Imagem muito grande (máx 5MB)."}), 400
+    # Lê os bytes e verifica tamanho (máx 2MB para base64 ficar razoável)
+    img_bytes = f.read()
+    if len(img_bytes) > 2 * 1024 * 1024:
+        return jsonify({"error": "Imagem muito grande (máx 2MB)."}), 400
+    if len(img_bytes) == 0:
+        return jsonify({"error": "Arquivo vazio."}), 400
 
-    ext      = os.path.splitext(secure_filename(f.filename))[1].lower()
-    uid_name = f"avatar_{user.id}_{uuid.uuid4().hex[:8]}{ext}"
-    f.save(os.path.join(UPLOAD_FOLDER, uid_name))
+    # Converte para base64 e monta data URL
+    b64     = base64.b64encode(img_bytes).decode("utf-8")
+    mime    = f.content_type.split(";")[0].strip()  # ex: image/jpeg
+    data_url = f"data:{mime};base64,{b64}"
 
-    user.avatar_url = f"/api/messages/files/{uid_name}"
+    # Salva direto no banco — sem dependência de disco
+    user.avatar_url = data_url
     db.commit()
 
     return jsonify({"avatar_url": user.avatar_url, "user": user.to_public()}), 200
