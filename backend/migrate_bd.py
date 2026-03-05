@@ -15,11 +15,11 @@ except ImportError:
     sys.exit("ERRO: pip install pymysql")
 
 # ── Configuração ─────────────────────────────────────────────
-DB_HOST = "shortline.proxy.rlwy.net"
-DB_PORT = 41195
-DB_USER = "root"
-DB_PASS = "UEgcKqkJhSyRgJHqiaoUwuaunXNWLTnH"
-DB_NAME = "railway"
+DB_HOST = "easypanel.pontocomdesconto.com.br"
+DB_PORT = 3307
+DB_USER = "mysql"
+DB_PASS = "d8f0525bbe9dea9e3097"
+DB_NAME = "techfreela"
 # ─────────────────────────────────────────────────────────────
 
 def run():
