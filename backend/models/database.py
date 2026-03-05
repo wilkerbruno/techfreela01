@@ -46,12 +46,13 @@ class User(Base):
     def to_public(self):
         return {
             "id": self.id, "name": self.name, "email": self.email,
-            "type": self.type, "role": self.role or "", "bio": self.bio or "",
-            "skills": self.skills or [], "linkedin": self.linkedin or "",
-            "github": self.github or "", "credits": self.credits,
-            "is_admin": self.is_admin,
+            "type": self.type, "role": self.role or "",
+            "bio": self.bio or "", "skills": self.skills or [],
+            "linkedin": self.linkedin or "", "github": self.github or "",
+            "avatar_url": self.avatar_url or "",   # ← linha adicionada
+            "credits": self.credits, "is_admin": self.is_admin,
             "created_at": self.created_at.isoformat()+"Z" if self.created_at else None,
-        }
+    }
 
 
 class Job(Base):

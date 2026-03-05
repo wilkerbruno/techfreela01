@@ -980,6 +980,7 @@ def get_job_applicants(job_id):
                 "skills":      candidate.skills or [],
                 "linkedin":    candidate.linkedin or "",
                 "github":      candidate.github or "",
+                "avatar_url":  candidate.avatar_url or "",
                 "experiences": [e.to_dict() for e in candidate.experiences],
                 "portfolio":   [p.to_dict() for p in candidate.portfolio],
             }
@@ -1065,7 +1066,7 @@ def list_conversations():
             "application_id": app_id,
             "job_id":         job.id,
             "job_title":      job.title,
-            "other_user":     {"id": other_user.id, "name": other_user.name, "role": other_user.role or ""} if other_user else None,
+            "other_user": {"id": other_user.id, "name": other_user.name, "role": other_user.role or "", "avatar_url": other_user.avatar_url or ""} if other_user else None,
             "last_message":   last_msg.to_dict() if last_msg else None,
             "unread":         unread,
         })

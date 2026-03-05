@@ -158,8 +158,8 @@ const App = (() => {
   // ---- PAYMENT FLOW ----
   let _payState = {
     packageId:     null,
-    paymentId:     null,  // ID interno do banco
-    pixCode:       "",    // Chave PIX copia-e-cola
+    paymentId:     null,
+    pixCode:       "",
     pollTimer:     null,
     timerInterval: null,
   };
@@ -170,7 +170,6 @@ const App = (() => {
     const pkg = DB.creditPackages.find(x => x.credits === amount);
     _payState.packageId = pkgMap[amount];
 
-    // Reseta o modal para o step inicial
     _payShowStep("summary");
     UI.setHtml("pay-pkg-name",  `${amount} créditos`);
     UI.setHtml("pay-pkg-label", pkg ? pkg.label : "Pacote");
@@ -181,7 +180,6 @@ const App = (() => {
     UI.openModal("payment-modal");
   };
 
-  // Mostra só o step desejado, esconde os outros
   const _payShowStep = (step) => {
     ["summary","qr","success","error"].forEach(s => {
       const el = document.getElementById(`pay-step-${s}`);
@@ -198,7 +196,6 @@ const App = (() => {
       _payState.paymentId = data.payment_id;
       _payState.pixCode   = data.qr_code || "";
 
-      // Preenche QR Code
       const img = document.getElementById("pay-qr-img");
       if (img && data.qr_base64) {
         img.src = `data:image/png;base64,${data.qr_base64}`;
@@ -206,11 +203,9 @@ const App = (() => {
       const codeEl = document.getElementById("pay-pix-code");
       if (codeEl) codeEl.textContent = data.qr_code || "";
 
-      // Muda para o step do QR
       _payShowStep("qr");
       UI.setHtml("pay-status-msg", "Aguardando pagamento…");
 
-      // Inicia countdown e polling
       _startPixTimer(data.expires_in || 1800);
       _pollPayment();
 
@@ -227,7 +222,6 @@ const App = (() => {
       const btn = document.getElementById("btn-copy-pix");
       if (btn) { btn.textContent = "✅ Copiado!"; setTimeout(() => { btn.textContent = "📋 Copiar"; }, 2000); }
     }).catch(() => {
-      // Fallback para browsers sem clipboard API
       const ta = document.createElement("textarea");
       ta.value = _payState.pixCode;
       document.body.appendChild(ta);
@@ -278,7 +272,7 @@ const App = (() => {
     let attempts = 0;
     _payState.pollTimer = setInterval(async () => {
       attempts++;
-      if (attempts > 360) { clearInterval(_payState.pollTimer); return; } // 30 min max
+      if (attempts > 360) { clearInterval(_payState.pollTimer); return; }
       try {
         const data = await GET(`/api/payments/${_payState.paymentId}/status`);
         const s = data.status;
@@ -359,7 +353,7 @@ const App = (() => {
     try {
       const c = await GET("/api/admin/config/raw");
       const cfg = c.config || {};
-      UI.setVal("adm-mp-access-token", ""); // Never pre-fill secrets
+      UI.setVal("adm-mp-access-token", "");
       UI.setVal("adm-mp-public-key",   cfg.mp_public_key || "");
       const sandbox = cfg.mp_sandbox || "true";
       UI.setVal("adm-sandbox", sandbox);
@@ -431,25 +425,14 @@ const App = (() => {
     }
   };
 
-  const renderProfilePage = async () => {
-    const user = State.getUser(); if (!user) return;
-    UI.setText("profile-name-el",  user.name);
-    
+  // ---- PROFILE ----
 
-    const profInitials = user.name.split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase();
-    const profAvEl = document.getElementById("profile-avatar-el");
-    if (profAvEl) {
-      if (user.avatar_url) {
-        profAvEl.innerHTML = `<img src="${user.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block"><div class="profile-avatar-overlay">📷</div>`;
-      } else {
-        profAvEl.innerHTML = profInitials + '<div class="profile-avatar-overlay">📷</div>';
-      }
-    }
-
-    const uploadAvatar = async (input) => {
+  // [CORREÇÃO] uploadAvatar como função independente no módulo (não dentro de renderProfilePage)
+  const uploadAvatar = async (input) => {
     const file = input.files[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) { UI.toastWarn("Selecione apenas imagens."); return; }
+    if (file.size > 5 * 1024 * 1024) { UI.toastWarn("Imagem muito grande (máx 5MB)."); return; }
     const form = new FormData();
     form.append("avatar", file);
     try {
@@ -464,8 +447,21 @@ const App = (() => {
     }
     input.value = "";
   };
-      
 
+  const renderProfilePage = async () => {
+    const user = State.getUser(); if (!user) return;
+    UI.setText("profile-name-el", user.name);
+
+    // [CORREÇÃO] Avatar com foto ou iniciais + overlay de câmera
+    const profInitials = user.name.split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase();
+    const profAvEl = document.getElementById("profile-avatar-el");
+    if (profAvEl) {
+      if (user.avatar_url) {
+        profAvEl.innerHTML = `<img src="${user.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block"><div class="profile-avatar-overlay">📷</div>`;
+      } else {
+        profAvEl.innerHTML = profInitials + '<div class="profile-avatar-overlay">📷</div>';
+      }
+    }
 
     UI.setText("profile-role-el",  "// "+(user.role||"DESENVOLVEDOR").toUpperCase());
     UI.setText("profile-bio-el",   user.bio||"");
@@ -621,7 +617,7 @@ const App = (() => {
   };
 
   // ============================================================
-  // COMPANY PANEL — Painel completo para empresas
+  // COMPANY PANEL
   // ============================================================
 
   let _cpanel = { tab:"jobs", jobs:[], allApplicants:[], currentJobId:null, currentJobTitle:"" };
@@ -845,11 +841,13 @@ const App = (() => {
     el.innerHTML = applicants.map(a => {
       const c = a.candidate;
       const initials = c.name.split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase();
+      const candAvatar = c.avatar_url ? `<img src="${c.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block">` : initials;
+
       const skills   = (c.skills||[]).slice(0,6).map(s=>`<span class="tag tag-gray" style="font-size:0.7rem">${UI.esc(s)}</span>`).join("");
       return `
       <div class="card card-hover" style="margin-bottom:0.85rem;padding:1.25rem 1.5rem;cursor:pointer" onclick="App.openCandidateProfile(${a.application_id})">
         <div style="display:flex;align-items:flex-start;gap:1rem;flex-wrap:wrap">
-          <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#8b5cf6);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1rem;color:#000;flex-shrink:0">${initials}</div>
+          <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#8b5cf6);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1rem;color:#000;flex-shrink:0;overflow:hidden">${candAvatar}</div>
           <div style="flex:1;min-width:180px">
             <div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;margin-bottom:0.2rem">
               <span style="font-weight:700;font-size:0.97rem;color:var(--text1)">${UI.esc(c.name)}</span>
@@ -893,7 +891,7 @@ const App = (() => {
     const c = a.candidate;
 
     const initials = c.name.split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase();
-    UI.setHtml("cpm-avatar", initials);
+    UI.setHtml("cpm-avatar", c.avatar_url ? `<img src="${c.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block">` : initials);
     UI.setText("cpm-name",   c.name);
     UI.setText("cpm-role",   c.role || "Desenvolvedor");
 
@@ -986,10 +984,11 @@ const App = (() => {
         const last  = c.last_message;
         const time  = last?.created_at ? _formatMsgTime(last.created_at) : "";
         const initials = (other.name||"?").split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase();
+const convAvatar = other.avatar_url ? `<img src="${other.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block">` : initials;
         return `
         <div class="card card-hover" style="margin-bottom:0.6rem;padding:1rem 1.25rem;cursor:pointer" onclick="App.openChat(${c.application_id},'${UI.esc(other.name||'?')}')">
           <div style="display:flex;align-items:center;gap:0.85rem">
-            <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#8b5cf6);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.85rem;color:#000;flex-shrink:0">${initials}</div>
+            <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#8b5cf6);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.85rem;color:#000;flex-shrink:0;overflow:hidden">${convAvatar}</div>
             <div style="flex:1;min-width:0">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.15rem">
                 <div style="font-weight:700;color:var(--text1);font-size:0.9rem">${UI.esc(other.name||'?')}</div>
@@ -1019,7 +1018,7 @@ const App = (() => {
   };
 
   // ============================================================
-  // MY APPLICATIONS — página de candidaturas para devs
+  // MY APPLICATIONS
   // ============================================================
   let _myApps = [];
 
@@ -1137,6 +1136,8 @@ const App = (() => {
       if (user) {
         UI.hide("nav-login-btn"); UI.hide("nav-register-btn");
         el("nav-avatar-wrap").style.display  = "flex";
+
+        // [CORREÇÃO] Exibe foto ou iniciais no nav-avatar
         const initials = user.name.split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase();
         const navAv = el("nav-avatar");
         if (navAv) {
@@ -1146,6 +1147,7 @@ const App = (() => {
             navAv.textContent = initials;
           }
         }
+
         UI.setText("credits-val", State.getCredits());
 
         if (el("ud-name"))    el("ud-name").textContent    = user.name;
@@ -1202,6 +1204,7 @@ const App = (() => {
     openChat, sendChatMessage, openConversations,
     loadMyApplications, filterMyApplications,
     toggleUserMenu, closeUserMenu, toggleMobileMenu, closeMobileMenu,
+    uploadAvatar,  // [CORREÇÃO] exportada corretamente no return
     // Company Panel
     companyTab, loadCompanyPanel,
     viewJobApplicants, loadApplicantsForJob, filterApplicants,

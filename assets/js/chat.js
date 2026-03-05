@@ -6,6 +6,11 @@ const FM = (() => {
   let _convOpen = true;     // painel de conversas aberto?
   let _pollTimer = null;
 
+  const _avatarHtml = (url, initials) => {
+  if (url) return `<img src="${url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block">`;
+  return initials;
+};
+
   // ── Inicializa quando o usuário faz login ──
   const init = () => {
     // Espera o evento de auth para exibir o widget
@@ -69,8 +74,8 @@ const FM = (() => {
       const hasUnread = (c.unread || 0) > 0;
       const isOpen  = !!_openChats[c.application_id];
 
-      return `<div class="fm-conv-item ${isOpen ? 'active' : ''}" onclick="FM.openChat(${c.application_id}, '${_esc(other.name || '?')}', '${_esc(c.job_title || '')}')">
-        <div class="fm-avatar">${initials}</div>
+      return `<div class="fm-conv-item ... onclick="FM.openChat(${c.application_id}, '${_esc(other.name || '?')}', '${_esc(c.job_title || '')}', '${_esc(other.avatar_url || '')}')">
+        <div class="fm-avatar">${_avatarHtml(other.avatar_url, initials)}</div>
         <div class="fm-conv-info">
           <div class="fm-conv-name">${_esc(other.name || '?')}</div>
           <div class="fm-conv-preview ${hasUnread ? 'unread' : ''}">${_esc(preview)}</div>
@@ -91,7 +96,7 @@ const FM = (() => {
   };
 
   // ── Abre janela de chat ──
-  const openChat = (applicationId, name, jobTitle) => {
+  const openChat = (applicationId, name, jobTitle, avatarUrl = "") => {
     // No mobile, delega para o modal existente
     if (window.innerWidth <= 768) {
       App.openChat(applicationId, name);
@@ -116,7 +121,7 @@ const FM = (() => {
     if (openIds.length >= 3) closeChat(parseInt(openIds[0]));
 
     _openChats[applicationId] = { collapsed: false, pollTimer: null };
-    _createChatWin(applicationId, name, jobTitle);
+    _createChatWin(applicationId, name, jobTitle, avatarUrl);
     _loadChatMsgs(applicationId);
     _openChats[applicationId].pollTimer = setInterval(() => _loadChatMsgs(applicationId), 5000);
 
@@ -125,14 +130,14 @@ const FM = (() => {
   };
 
   // ── Cria elemento da janela de chat ──
-  const _createChatWin = (applicationId, name, jobTitle) => {
+  const _createChatWin = (applicationId, name, jobTitle, avatarUrl = "") => {
     const wrap = document.getElementById("fm-chats");
     const div  = document.createElement("div");
     div.className = "fm-chat-win";
     div.id = `fm-chat-${applicationId}`;
     div.innerHTML = `
       <div class="fm-chat-header" onclick="FM.toggleChat(${applicationId})">
-        <div class="fm-avatar" style="width:32px;height:32px;min-width:32px;font-size:0.7rem">${name.split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase()}</div>
+        <div class="fm-avatar" style="width:32px;height:32px;min-width:32px;font-size:0.7rem">${_avatarHtml(avatarUrl, name.split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase())}</div>
         <div class="fm-chat-title">
           <div class="fm-chat-title-name">${_esc(name)}</div>
           <div class="fm-chat-title-sub">${_esc(jobTitle)}</div>
