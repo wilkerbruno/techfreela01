@@ -434,7 +434,39 @@ const App = (() => {
   const renderProfilePage = async () => {
     const user = State.getUser(); if (!user) return;
     UI.setText("profile-name-el",  user.name);
-    UI.setText("profile-avatar-el", user.name.split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase());
+    
+
+    const profInitials = user.name.split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase();
+    const profAvEl = document.getElementById("profile-avatar-el");
+    if (profAvEl) {
+      if (user.avatar_url) {
+        profAvEl.innerHTML = `<img src="${user.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block"><div class="profile-avatar-overlay">📷</div>`;
+      } else {
+        profAvEl.innerHTML = profInitials + '<div class="profile-avatar-overlay">📷</div>';
+      }
+    }
+
+    const uploadAvatar = async (input) => {
+    const file = input.files[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { UI.toastWarn("Selecione apenas imagens."); return; }
+    const form = new FormData();
+    form.append("avatar", file);
+    try {
+      const res  = await fetch("/api/profile/avatar", { method: "POST", credentials: "include", body: form });
+      const data = await res.json();
+      if (!res.ok) throw { message: data.error };
+      State.updateUser({ ...State.getUser(), avatar_url: data.avatar_url });
+      renderProfilePage();
+      UI.toastSuccess("Foto de perfil atualizada! 📷");
+    } catch (err) {
+      UI.toastError(err.message || "Erro ao enviar foto.");
+    }
+    input.value = "";
+  };
+      
+
+
     UI.setText("profile-role-el",  "// "+(user.role||"DESENVOLVEDOR").toUpperCase());
     UI.setText("profile-bio-el",   user.bio||"");
     const sc=["tag-blue","tag-green","tag-purple","tag-orange","tag-pink"];
@@ -1106,7 +1138,14 @@ const App = (() => {
         UI.hide("nav-login-btn"); UI.hide("nav-register-btn");
         el("nav-avatar-wrap").style.display  = "flex";
         const initials = user.name.split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase();
-        UI.setText("nav-avatar", initials);
+        const navAv = el("nav-avatar");
+        if (navAv) {
+          if (user.avatar_url) {
+            navAv.innerHTML = `<img src="${user.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:10px;display:block">`;
+          } else {
+            navAv.textContent = initials;
+          }
+        }
         UI.setText("credits-val", State.getCredits());
 
         if (el("ud-name"))    el("ud-name").textContent    = user.name;

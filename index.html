@@ -437,7 +437,10 @@
 
     <!-- Profile Header -->
     <div class="profile-header">
-      <div class="profile-avatar" id="profile-avatar-el">TF</div>
+      <div class="profile-avatar" id="profile-avatar-el" onclick="document.getElementById('avatar-file-input').click()" title="Clique para trocar a foto">
+  TF<div class="profile-avatar-overlay">📷</div>
+</div>
+<input type="file" id="avatar-file-input" accept="image/*" style="display:none" onchange="App.uploadAvatar(this)">
       <div class="profile-info">
         <div class="profile-name" id="profile-name-el">Carregando...</div>
         <div class="profile-role" id="profile-role-el">// DESENVOLVEDOR</div>

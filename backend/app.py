@@ -500,6 +500,34 @@ def update_profile():
     return jsonify({"message": "Perfil atualizado!", "user": user.to_public()})
 
 
+@app.route("/api/profile/avatar", methods=["POST"])
+@require_auth
+def upload_avatar():
+    """Upload de foto de perfil do usuário."""
+    db   = get_db()
+    user = current_user(db)
+
+    if "avatar" not in request.files:
+        return jsonify({"error": "Nenhuma imagem enviada."}), 400
+    f = request.files["avatar"]
+    if not f.filename:
+        return jsonify({"error": "Nome de arquivo inválido."}), 400
+    if not f.content_type.startswith("image/"):
+        return jsonify({"error": "Envie apenas imagens."}), 400
+
+    f.seek(0, 2); size = f.tell(); f.seek(0)
+    if size > 5 * 1024 * 1024:
+        return jsonify({"error": "Imagem muito grande (máx 5MB)."}), 400
+
+    ext      = os.path.splitext(secure_filename(f.filename))[1].lower()
+    uid_name = f"avatar_{user.id}_{uuid.uuid4().hex[:8]}{ext}"
+    f.save(os.path.join(UPLOAD_FOLDER, uid_name))
+
+    user.avatar_url = f"/api/messages/files/{uid_name}"
+    db.commit()
+
+    return jsonify({"avatar_url": user.avatar_url, "user": user.to_public()}), 200
+
 @app.route("/api/profile/experience", methods=["POST"])
 @require_auth
 def add_experience():

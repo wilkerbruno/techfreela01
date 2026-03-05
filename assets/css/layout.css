@@ -590,7 +590,24 @@
   font-weight: 800;
   color: white;
   user-select: none;
+  position: relative;
+  cursor: pointer;
+  overflow: hidden;
 }
+
+.profile-avatar-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  opacity: 0;
+  transition: opacity 0.2s;
+  border-radius: inherit;
+}
+.profile-avatar:hover .profile-avatar-overlay { opacity: 1; }
 
 .profile-info { flex: 1; min-width: 200px; }
 
