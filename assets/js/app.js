@@ -34,17 +34,22 @@ const App = (() => {
       UI.toastWarn("Faça login para continuar."); UI.openModal("login-modal"); return;
     }
     if (page === "admin"    && !isAdmin) { UI.toastWarn("Acesso negado."); return; }
-    if (page === "post-job" && !isAdmin && user?.type !== "company") { UI.toastWarn("Apenas empresas podem publicar vagas."); return; }
+    if (page === "company"  && !isAdmin && user?.type !== "company") {
+    UI.toastWarn("Acesso exclusivo para empresas."); return;
+  }
     if (page === "company"  && !isAdmin && user?.type !== "company") { UI.toastWarn("Acesso exclusivo para empresas."); return; }
 
     UI.showPage(page);
     closeMobileMenu();
-    if (page === "jobs")            renderJobBoard();
-    if (page === "profile")         renderProfilePage();
-    if (page === "post-job")        renderPostJobCreditsInfo();
-    if (page === "admin")           loadAdminPage();
-    if (page === "company")         loadCompanyPanel();
-    if (page === "my-applications") loadMyApplications();
+    if (page === "jobs")             renderJobBoard();
+    if (page === "profile")          renderProfilePage();
+    if (page === "post-job")         renderPostJobCreditsInfo();
+    if (page === "admin")            loadAdminPage();
+    if (page === "company")          loadCompanyPanel();
+    if (page === "my-applications")  loadMyApplications();
+    if (page === "companies")        loadCompanies();
+    if (page === "company-public")   {}  // carregado por viewCompanyPublic()
+    if (page === "quotes")           loadQuotes();
   };
 
   const renderJobBoard = async () => {
@@ -624,15 +629,17 @@ const App = (() => {
 
   const companyTab = (tab) => {
     _cpanel.tab = tab;
-    ["jobs","applicants","messages"].forEach(t => {
-      const btn = document.getElementById("ctab-" + t);
-      const pnl = document.getElementById("cpanel-" + t);
-      if (btn) btn.classList.toggle("active", t === tab);
-      if (pnl) pnl.style.display = t === tab ? "" : "none";
-    });
-    if (tab === "jobs")       renderCompanyJobs();
-    if (tab === "applicants") _populateJobFilter();
-    if (tab === "messages")   renderCompanyConversations();
+    ["jobs","applicants","messages","services","cquotes"].forEach(t => {
+    const btn = document.getElementById("ctab-" + t);
+    const pnl = document.getElementById("cpanel-" + t);
+    if (btn) btn.classList.toggle("active", t === tab);
+    if (pnl) pnl.style.display = t === tab ? "" : "none";
+  });
+  if (tab === "jobs")       renderCompanyJobs();
+  if (tab === "applicants") _populateJobFilter();
+  if (tab === "messages")   renderCompanyConversations();
+  if (tab === "services")   loadMyServices();
+  if (tab === "cquotes")    _loadQuotesReceivedInPanel();
   };
 
   const loadCompanyPanel = async () => {
@@ -1163,12 +1170,15 @@ const convAvatar = other.avatar_url ? `<img src="${other.avatar_url}" style="wid
         if (el("ud-btn-company"))       el("ud-btn-company").style.display       = (isCompany || isAdmin) ? "" : "none";
         if (el("ud-btn-applications"))  el("ud-btn-applications").style.display  = (!isCompany || isAdmin) ? "" : "none";
         if (el("ud-btn-admin"))         el("ud-btn-admin").style.display         = isAdmin ? "" : "none";
+        if (el("ud-btn-quotes"))        el("ud-btn-quotes").style.display        = "";
+        if (el("nav-quotes-btn"))       el("nav-quotes-btn").style.display       = "";
       } else {
         UI.show("nav-login-btn"); UI.show("nav-register-btn");
         if (el("nav-avatar-wrap")) el("nav-avatar-wrap").style.display = "none";
         closeUserMenu();
-        ["nav-admin-btn","nav-company-btn","nav-post-job-btn","nav-applications-btn"].forEach(id => {
+        ["nav-admin-btn","nav-company-btn","nav-post-job-btn","nav-applications-btn","nav-quotes-btn"].forEach(id => {
           if (el(id)) el(id).style.display = "none";
+          if (el("ud-btn-quotes")) el("ud-btn-quotes").style.display = "none";
         });
       }
     });
@@ -1194,6 +1204,415 @@ const convAvatar = other.avatar_url ? `<img src="${other.avatar_url}" style="wid
 
   const init = async () => { UI.initModalOutsideClick(); initEvents(); await checkSession(); renderJobBoard(); };
 
+
+
+  
+// ============================================================
+// COMPANIES — Vitrine de empresas
+// ============================================================
+
+let _companiesData = [];
+
+const loadCompanies = async () => {
+  const grid = document.getElementById("companies-grid");
+  if (grid) grid.innerHTML = `<div class="empty-state"><div class="loading-spinner" style="margin:0 auto"></div></div>`;
+  try {
+    const data = await GET("/api/companies");
+    _companiesData = data.companies || [];
+    _renderCompaniesGrid(_companiesData);
+  } catch {
+    if (grid) grid.innerHTML = `<div class="empty-state"><div class="empty-state-text">Erro ao carregar empresas.</div></div>`;
+  }
+};
+
+const filterCompanies = (q) => {
+  q = q.toLowerCase();
+  const filtered = q ? _companiesData.filter(c =>
+    c.name.toLowerCase().includes(q) || (c.role||"").toLowerCase().includes(q)
+  ) : _companiesData;
+  _renderCompaniesGrid(filtered);
+};
+
+const _renderCompaniesGrid = (list) => {
+  const grid = document.getElementById("companies-grid");
+  if (!grid) return;
+  if (!list.length) {
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><div class="empty-state-icon">🏢</div><div class="empty-state-text">Nenhuma empresa encontrada.</div></div>`;
+    return;
+  }
+  grid.innerHTML = list.map(c => {
+    const initials = c.name.split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase();
+    const avatarHtml = c.avatar_url
+      ? `<img src="${c.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:var(--r-lg);display:block">`
+      : initials;
+    const svcsPreview = (c.services||[]).slice(0,2).map(s =>
+      `<span class="tag tag-blue" style="font-size:0.72rem">${UI.esc(s.title)}</span>`
+    ).join("");
+    return `
+      <div class="card card-hover" style="cursor:pointer;padding:1.5rem" onclick="App.viewCompanyPublic(${c.id})">
+        <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem">
+          <div style="width:52px;height:52px;border-radius:var(--r-lg);background:linear-gradient(135deg,var(--accent2),var(--accent));display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1rem;color:#fff;flex-shrink:0;overflow:hidden">${avatarHtml}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:800;font-size:1rem;color:var(--text1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${UI.esc(c.name)}</div>
+            <div style="font-size:0.78rem;color:var(--text3)">${UI.esc(c.role||"Empresa")}</div>
+          </div>
+        </div>
+        ${c.bio ? `<p style="font-size:0.82rem;color:var(--text2);line-height:1.5;margin-bottom:0.75rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${UI.esc(c.bio)}</p>` : ""}
+        <div style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-bottom:0.75rem">${svcsPreview}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:0.75rem;color:var(--text3)">${c.services_count} serviço(s)</span>
+          <span style="font-size:0.78rem;color:var(--accent);font-weight:600">Ver perfil →</span>
+        </div>
+      </div>`;
+  }).join("");
+};
+
+const viewCompanyPublic = async (companyId) => {
+  navigate("company-public");
+  const nameEl = document.getElementById("cpub-name");
+  const svcsEl = document.getElementById("cpub-services-grid");
+  if (nameEl) nameEl.textContent = "Carregando...";
+  if (svcsEl) svcsEl.innerHTML = `<div class="empty-state"><div class="loading-spinner" style="margin:0 auto"></div></div>`;
+
+  try {
+    const data = await GET(`/api/companies/${companyId}`);
+    const c = data.company;
+    const initials = c.name.split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase();
+
+    const avatarEl = document.getElementById("cpub-avatar");
+    if (avatarEl) {
+      avatarEl.innerHTML = c.avatar_url
+        ? `<img src="${c.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:var(--r-lg);display:block">`
+        : initials;
+    }
+    if (document.getElementById("cpub-name"))  document.getElementById("cpub-name").textContent  = c.name;
+    if (document.getElementById("cpub-role"))  document.getElementById("cpub-role").textContent  = `// ${(c.role||"EMPRESA").toUpperCase()}`;
+    if (document.getElementById("cpub-bio"))   document.getElementById("cpub-bio").textContent   = c.bio || "";
+    const tagsEl = document.getElementById("cpub-tags");
+    if (tagsEl) tagsEl.innerHTML = (c.skills||[]).map(s=>`<span class="tag tag-blue">${UI.esc(s)}</span>`).join("");
+
+    if (!svcsEl) return;
+    if (!c.services.length) {
+      svcsEl.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><div class="empty-state-icon">🛠️</div><div class="empty-state-text">Nenhum serviço cadastrado.</div></div>`;
+      return;
+    }
+    svcsEl.innerHTML = c.services.map(s => `
+      <div class="card" style="padding:1.25rem">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0.5rem">
+          <div style="font-weight:800;font-size:0.95rem;color:var(--text1);flex:1">${UI.esc(s.title)}</div>
+          <div style="font-size:1.1rem;font-weight:800;color:var(--accent);white-space:nowrap;margin-left:0.5rem">R$ ${UI.esc(s.price)}</div>
+        </div>
+        ${s.category ? `<span class="tag tag-purple" style="font-size:0.7rem;margin-bottom:0.6rem">${UI.esc(s.category)}</span>` : ""}
+        ${s.description ? `<p style="font-size:0.82rem;color:var(--text2);line-height:1.5;margin-bottom:0.75rem">${UI.esc(s.description)}</p>` : ""}
+        ${s.delivery_days ? `<div style="font-size:0.78rem;color:var(--text3);margin-bottom:0.75rem">⏱️ Prazo: ${s.delivery_days} dias</div>` : ""}
+        <button class="btn btn-sm btn-primary btn-full" onclick="App.requestQuote(${s.id}, '${UI.esc(s.title).replace(/'/g,"\\'")}', '${UI.esc(c.name).replace(/'/g,"\\'")}', '${UI.esc(s.price)}')">
+          📋 Solicitar Orçamento
+        </button>
+      </div>`).join("");
+  } catch (err) {
+    if (svcsEl) svcsEl.innerHTML = `<div class="empty-state"><div class="empty-state-text">Erro ao carregar.</div></div>`;
+  }
+};
+
+// ============================================================
+// QUOTES — Orçamentos
+// ============================================================
+
+const requestQuote = (serviceId, serviceName, companyName, price) => {
+  const user = State.getUser();
+  if (!user) { UI.openModal("login-modal"); UI.toastWarn("Faça login para solicitar orçamentos."); return; }
+  document.getElementById("rq-service-id").value = serviceId;
+  const label = document.getElementById("rq-service-label");
+  if (label) label.textContent = `${serviceName} — ${companyName}`;
+  const priceEl = document.getElementById("rq-price-display");
+  if (priceEl) priceEl.textContent = `R$ ${price}`;
+  const msgEl = document.getElementById("rq-message");
+  if (msgEl) msgEl.value = "";
+  UI.openModal("request-quote-modal");
+};
+
+const submitQuoteRequest = async () => {
+  const serviceId = document.getElementById("rq-service-id").value;
+  const message   = (document.getElementById("rq-message")?.value || "").trim();
+  if (!serviceId) return;
+  try {
+    await POST("/api/quotes", { service_id: parseInt(serviceId), message });
+    UI.closeModal("request-quote-modal");
+    UI.toastSuccess("Orçamento solicitado! 📋");
+  } catch (err) {
+    UI.toastError(err.message || "Erro ao solicitar.");
+  }
+};
+
+let _quotesTab = "sent";
+
+const quotesTab = (tab) => {
+  _quotesTab = tab;
+  ["sent","received"].forEach(t => {
+    const btn = document.getElementById(`qtab-${t}`);
+    const pnl = document.getElementById(`qpanel-${t}`);
+    if (btn) btn.classList.toggle("active", t === tab);
+    if (pnl) pnl.style.display = t === tab ? "" : "none";
+  });
+  if (tab === "sent")     _loadQuotesSent();
+  if (tab === "received") _loadQuotesReceived();
+};
+
+const loadQuotes = () => {
+  const user = State.getUser();
+  if (!user) return;
+  // Mostra tab "Recebidos" só para empresas
+  const recvTab = document.getElementById("qtab-received");
+  if (recvTab) recvTab.style.display = user.type === "company" ? "" : "none";
+  quotesTab("sent");
+};
+
+const _loadQuotesSent = async () => {
+  const el = document.getElementById("quotes-sent-list");
+  if (!el) return;
+  el.innerHTML = `<div class="empty-state"><div class="loading-spinner" style="margin:0 auto"></div></div>`;
+  try {
+    const data = await GET("/api/quotes/sent");
+    const quotes = data.quotes || [];
+    if (!quotes.length) {
+      el.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📤</div><div class="empty-state-text">Você ainda não solicitou nenhum orçamento.<br><a href="#" onclick="App.navigate('companies');return false" style="color:var(--accent)">Explorar empresas →</a></div></div>`;
+      return;
+    }
+    el.innerHTML = quotes.map(q => _renderQuoteCard(q, "sent")).join("");
+  } catch { el.innerHTML = `<div class="empty-state"><div class="empty-state-text">Erro ao carregar.</div></div>`; }
+};
+
+const _loadQuotesReceived = async () => {
+  const el = document.getElementById("quotes-received-list");
+  if (!el) return;
+  el.innerHTML = `<div class="empty-state"><div class="loading-spinner" style="margin:0 auto"></div></div>`;
+  try {
+    const data = await GET("/api/quotes/received");
+    const quotes = data.quotes || [];
+    if (!quotes.length) {
+      el.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📥</div><div class="empty-state-text">Nenhuma solicitação de orçamento recebida ainda.</div></div>`;
+      return;
+    }
+    el.innerHTML = quotes.map(q => _renderQuoteCard(q, "received")).join("");
+  } catch { el.innerHTML = `<div class="empty-state"><div class="empty-state-text">Erro ao carregar.</div></div>`; }
+};
+
+const _quoteStatusLabel = (s) => ({
+  pending:    `<span class="tag tag-gray">⏳ Aguardando</span>`,
+  responded:  `<span class="tag tag-blue">💼 Proposta Enviada</span>`,
+  accepted:   `<span class="tag tag-green">✅ Aceito</span>`,
+  rejected:   `<span class="tag" style="background:rgba(239,68,68,0.15);color:#f87171">❌ Rejeitado</span>`,
+  cancelled:  `<span class="tag tag-gray">🚫 Cancelado</span>`,
+})[s] || s;
+
+const _renderQuoteCard = (q, view) => {
+  const svc  = q.service || {};
+  const req  = q.requester || {};
+  const prop = q.proposal;
+  const isSent = view === "sent";
+
+  const proposalBlock = prop ? `
+    <div style="background:rgba(0,245,196,0.06);border:1px solid rgba(0,245,196,0.18);border-radius:10px;padding:1rem;margin-top:0.75rem">
+      <div style="font-size:0.75rem;color:var(--accent);font-weight:700;margin-bottom:0.5rem">💼 PROPOSTA RECEBIDA</div>
+      <div style="font-size:1.4rem;font-weight:800;color:var(--accent)">R$ ${UI.esc(prop.price)}</div>
+      ${prop.delivery_days ? `<div style="font-size:0.8rem;color:var(--text3);margin-top:0.25rem">⏱️ Prazo: ${prop.delivery_days} dias</div>` : ""}
+      ${prop.notes ? `<p style="font-size:0.82rem;color:var(--text2);margin-top:0.5rem;line-height:1.5">${UI.esc(prop.notes)}</p>` : ""}
+      ${isSent && q.status === "responded" ? `
+        <div style="display:flex;gap:0.5rem;margin-top:0.75rem">
+          <button class="btn btn-sm btn-primary" style="flex:1" onclick="App.updateQuoteStatus(${q.id},'accepted')">✅ Aceitar</button>
+          <button class="btn btn-sm btn-secondary" style="flex:1" onclick="App.updateQuoteStatus(${q.id},'rejected')">❌ Rejeitar</button>
+        </div>` : ""}
+    </div>` : "";
+
+  const actionBlock = !isSent && q.status === "pending" ? `
+    <button class="btn btn-sm btn-primary" style="margin-top:0.75rem" onclick="App.respondToQuote(${q.id}, '${UI.esc(req.name||"").replace(/'/g,"\\'")}', '${UI.esc(q.message||"").replace(/'/g,"\\'")}')">
+      💼 Enviar Proposta
+    </button>` : "";
+
+  const cancelBlock = isSent && (q.status === "pending" || q.status === "responded") ? `
+    <button class="btn btn-sm btn-ghost" style="margin-top:0.5rem;font-size:0.75rem;color:var(--text3)" onclick="App.updateQuoteStatus(${q.id},'cancelled')">🚫 Cancelar</button>` : "";
+
+  return `
+    <div class="card" style="margin-bottom:1rem;padding:1.25rem 1.5rem" id="qcard-${q.id}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:0.5rem;margin-bottom:0.75rem">
+        <div>
+          <div style="font-weight:800;font-size:0.95rem;color:var(--text1)">${UI.esc(svc.title||"Serviço")}</div>
+          <div style="font-size:0.78rem;color:var(--text3);margin-top:0.2rem">
+            ${isSent ? `Empresa: ${UI.esc(svc.company?.name||"")}` : `Solicitante: ${UI.esc(req.name||"")}`}
+            · R$ ${UI.esc(svc.price||"")}
+          </div>
+        </div>
+        ${_quoteStatusLabel(q.status)}
+      </div>
+      ${q.message ? `<p style="font-size:0.82rem;color:var(--text2);line-height:1.5;background:rgba(255,255,255,0.03);padding:0.6rem 0.8rem;border-radius:8px;border:1px solid var(--border)">"${UI.esc(q.message)}"</p>` : ""}
+      ${proposalBlock}
+      ${actionBlock}
+      ${cancelBlock}
+    </div>`;
+};
+
+const respondToQuote = (quoteId, requesterName, message) => {
+  document.getElementById("resp-quote-id").value = quoteId;
+  const lbl = document.getElementById("resp-requester-label");
+  if (lbl) lbl.textContent = `Para: ${requesterName}`;
+  const msgEl = document.getElementById("resp-message-display");
+  if (msgEl) msgEl.textContent = message || "(sem mensagem)";
+  const priceEl = document.getElementById("resp-price");
+  const daysEl  = document.getElementById("resp-days");
+  const notesEl = document.getElementById("resp-notes");
+  if (priceEl) priceEl.value = "";
+  if (daysEl)  daysEl.value  = "";
+  if (notesEl) notesEl.value = "";
+  UI.openModal("respond-quote-modal");
+};
+
+const submitQuoteResponse = async () => {
+  const quoteId = document.getElementById("resp-quote-id").value;
+  const price   = (document.getElementById("resp-price")?.value || "").trim();
+  const days    = document.getElementById("resp-days")?.value || null;
+  const notes   = (document.getElementById("resp-notes")?.value || "").trim();
+  if (!price) { UI.toastWarn("Informe o valor da proposta."); return; }
+  try {
+    await POST(`/api/quotes/${quoteId}/respond`, { price, delivery_days: days ? parseInt(days) : null, notes });
+    UI.closeModal("respond-quote-modal");
+    UI.toastSuccess("Proposta enviada! 💼");
+    _loadQuotesReceived();
+  } catch (err) {
+    UI.toastError(err.message || "Erro ao enviar proposta.");
+  }
+};
+
+const updateQuoteStatus = async (quoteId, status) => {
+  const labels = { accepted:"aceito", rejected:"rejeitado", cancelled:"cancelado" };
+  try {
+    await PUT(`/api/quotes/${quoteId}/status`, { status });
+    UI.toastSuccess(`Orçamento ${labels[status]||status}!`);
+    if (_quotesTab === "sent")     _loadQuotesSent();
+    if (_quotesTab === "received") _loadQuotesReceived();
+  } catch (err) {
+    UI.toastError(err.message || "Erro.");
+  }
+};
+
+const _loadQuotesReceivedInPanel = async () => {
+  const el = document.getElementById("company-quotes-received-list");
+  if (!el) return;
+  el.innerHTML = `<div class="empty-state"><div class="loading-spinner" style="margin:0 auto"></div></div>`;
+  try {
+    const data = await GET("/api/quotes/received");
+    const quotes = data.quotes || [];
+    if (!quotes.length) {
+      el.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📥</div><div class="empty-state-text">Nenhuma solicitação de orçamento recebida ainda.</div></div>`;
+      return;
+    }
+    el.innerHTML = quotes.map(q => _renderQuoteCard(q, "received")).join("");
+  } catch {
+    el.innerHTML = `<div class="empty-state"><div class="empty-state-text">Erro ao carregar.</div></div>`;
+  }
+};
+// ============================================================
+// SERVICES — Gerenciamento de serviços da empresa
+// ============================================================
+
+const loadMyServices = async () => {
+  const el    = document.getElementById("company-services-list");
+  const count = document.getElementById("company-services-count");
+  if (!el) return;
+  el.innerHTML = `<div class="empty-state"><div class="loading-spinner" style="margin:0 auto"></div></div>`;
+  try {
+    const data = await GET("/api/services/mine");
+    const svcs = data.services || [];
+    if (count) count.textContent = `${svcs.length} serviço(s) cadastrado(s)`;
+    if (!svcs.length) {
+      el.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🛠️</div><div class="empty-state-text">Nenhum serviço cadastrado.</div><button class="btn btn-primary" style="margin-top:1rem" onclick="App.openAddService()">＋ Criar Primeiro Serviço</button></div>`;
+      return;
+    }
+    el.innerHTML = svcs.map(s => `
+      <div class="card" style="margin-bottom:1rem;padding:1.25rem 1.5rem" id="svc-card-${s.id}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:0.75rem">
+          <div style="flex:1;min-width:200px">
+            <div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;margin-bottom:0.3rem">
+              <div style="font-weight:800;font-size:0.95rem;color:var(--text1)">${UI.esc(s.title)}</div>
+              <span class="tag ${s.active?'tag-green':'tag-gray'}">${s.active?'Ativo':'Pausado'}</span>
+            </div>
+            ${s.category ? `<span class="tag tag-purple" style="font-size:0.72rem;margin-bottom:0.4rem">${UI.esc(s.category)}</span>` : ""}
+            ${s.description ? `<p style="font-size:0.82rem;color:var(--text2);margin-top:0.4rem;line-height:1.5">${UI.esc(s.description)}</p>` : ""}
+            <div style="margin-top:0.5rem;font-size:0.8rem;color:var(--text3)">
+              💰 R$ ${UI.esc(s.price)}
+              ${s.delivery_days ? ` · ⏱️ ${s.delivery_days} dias` : ""}
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:0.4rem;align-items:flex-end">
+            <button class="btn btn-sm btn-secondary" onclick="App.openEditService(${s.id})">✏️ Editar</button>
+            <button class="btn btn-sm btn-ghost" style="font-size:0.75rem;color:var(--text3)" onclick="App.deleteService(${s.id}, '${UI.esc(s.title).replace(/'/g,"\\'")}')">🗑️ Remover</button>
+          </div>
+        </div>
+      </div>`).join("");
+    window._myServices = svcs;
+  } catch { el.innerHTML = `<div class="empty-state"><div class="empty-state-text">Erro ao carregar serviços.</div></div>`; }
+};
+
+const openAddService = () => {
+  document.getElementById("svc-edit-id").value = "";
+  document.getElementById("add-svc-title").textContent = "Novo Serviço 🛠️";
+  ["svc-title","svc-price","svc-days","svc-description"].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = "";
+  });
+  const cat = document.getElementById("svc-category");
+  if (cat) cat.value = "";
+  UI.openModal("add-service-modal");
+};
+
+const openEditService = (svcId) => {
+  const svc = (window._myServices||[]).find(s => s.id === svcId);
+  if (!svc) return;
+  document.getElementById("svc-edit-id").value = svcId;
+  document.getElementById("add-svc-title").textContent = "Editar Serviço ✏️";
+  if (document.getElementById("svc-title"))       document.getElementById("svc-title").value       = svc.title;
+  if (document.getElementById("svc-price"))       document.getElementById("svc-price").value       = svc.price;
+  if (document.getElementById("svc-days"))        document.getElementById("svc-days").value        = svc.delivery_days || "";
+  if (document.getElementById("svc-description")) document.getElementById("svc-description").value = svc.description;
+  if (document.getElementById("svc-category"))    document.getElementById("svc-category").value    = svc.category;
+  UI.openModal("add-service-modal");
+};
+
+const saveService = async () => {
+  const editId = document.getElementById("svc-edit-id").value;
+  const title  = (document.getElementById("svc-title")?.value || "").trim();
+  const price  = (document.getElementById("svc-price")?.value || "").trim();
+  if (!title || !price) { UI.toastWarn("Título e preço são obrigatórios."); return; }
+  const payload = {
+    title, price,
+    category:     (document.getElementById("svc-category")?.value || "").trim(),
+    description:  (document.getElementById("svc-description")?.value || "").trim(),
+    delivery_days: parseInt(document.getElementById("svc-days")?.value) || null,
+  };
+  try {
+    if (editId) {
+      await PUT(`/api/services/${editId}`, payload);
+      UI.toastSuccess("Serviço atualizado! ✅");
+    } else {
+      await POST("/api/services", payload);
+      UI.toastSuccess("Serviço criado! 🛠️");
+    }
+    UI.closeModal("add-service-modal");
+    loadMyServices();
+  } catch (err) {
+    UI.toastError(err.message || "Erro ao salvar serviço.");
+  }
+};
+
+const deleteService = async (svcId, title) => {
+  if (!confirm(`Remover o serviço "${title}"? Esta ação não pode ser desfeita.`)) return;
+  try {
+    await fetch(`/api/services/${svcId}`, { method:"DELETE", credentials:"include" });
+    UI.toastSuccess("Serviço removido.");
+    loadMyServices();
+  } catch { UI.toastError("Erro ao remover serviço."); }
+};
+
+
+
   return {
     init, navigate, goHome, filterJobs, viewJob, applyJob, postJob, renderPostJobCreditsInfo,
     doLogin, doRegister, doLogout, switchRegisterTab,
@@ -1211,6 +1630,10 @@ const convAvatar = other.avatar_url ? `<img src="${other.avatar_url}" style="wid
     openEditJob, saveJobEdit, toggleJob,
     openCandidateProfile, updateStatusFromProfile,
     renderCompanyConversations,
+   loadCompanies, filterCompanies, viewCompanyPublic,
+   requestQuote, submitQuoteRequest,
+   quotesTab, loadQuotes, respondToQuote, submitQuoteResponse, updateQuoteStatus,
+   loadMyServices, openAddService, openEditService, saveService, deleteService,
   };
 })();
 

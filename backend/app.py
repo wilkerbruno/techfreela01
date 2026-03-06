@@ -18,6 +18,12 @@ import uuid
 from werkzeug.utils import secure_filename
 import base64
 
+from models.database import (
+       Base, User, Job, Experience, PortfolioItem,
+       Application, CreditEvent, Payment, AdminConfig,
+       Message, Service, QuoteRequest, QuoteProposal
+   )
+
 
 UPLOAD_FOLDER   = os.path.join(os.path.dirname(__file__), "uploads")
 ALLOWED_EXTENSIONS = True  # aceita tudo
@@ -49,7 +55,8 @@ try:
 except ImportError:
     HAS_CORS = False
 
-from models.database import Base, User, Job, Experience, PortfolioItem, Application, CreditEvent, Payment, AdminConfig, Message
+from models.database import Base, User, Job, Experience, PortfolioItem, Application, CreditEvent, Payment, AdminConfig, Message, Service, QuoteRequest, QuoteProposal
+
 
 # ============================================================
 # CONFIGURAÇÃO
@@ -578,6 +585,248 @@ def get_credits():
             .order_by(CreditEvent.created_at.desc()).limit(20).all())
     return jsonify({"balance": user.credits, "packages": CREDIT_PACKAGES,
                     "costs": CREDIT_COSTS, "history": [e.to_dict() for e in hist]})
+
+
+
+@app.route("/api/companies")
+def list_companies():
+    """Lista pública de empresas com quantidade e prévia dos serviços."""
+    db     = get_db()
+    search = request.args.get("search", "").strip()
+    q = db.query(User).filter_by(type="company", is_active=True)
+    if search:
+        q = q.filter(
+            or_(User.name.ilike(f"%{search}%"), User.role.ilike(f"%{search}%"))
+        )
+    companies = q.order_by(User.name.asc()).all()
+    result = []
+    for c in companies:
+        svcs = db.query(Service).filter_by(company_id=c.id, active=True).all()
+        result.append({
+            "id": c.id, "name": c.name, "role": c.role or "",
+            "bio": c.bio or "", "avatar_url": c.avatar_url or "",
+            "linkedin": c.linkedin or "", "github": c.github or "",
+            "services_count": len(svcs),
+            "services": [s.to_dict(include_company=False) for s in svcs[:3]],
+            "created_at": c.created_at.isoformat()+"Z" if c.created_at else None,
+        })
+    return jsonify({"companies": result, "total": len(result)})
+
+@app.route("/api/companies/<int:company_id>")
+def get_company_public(company_id):
+    """Perfil público de uma empresa com todos os serviços ativos."""
+    db = get_db()
+    c  = db.query(User).filter_by(id=company_id, type="company", is_active=True).first()
+    if not c:
+        return jsonify({"error": "Empresa não encontrada."}), 404
+    svcs = db.query(Service).filter_by(company_id=c.id, active=True).all()
+    return jsonify({
+        "company": {
+            "id": c.id, "name": c.name, "role": c.role or "",
+            "bio": c.bio or "", "avatar_url": c.avatar_url or "",
+            "linkedin": c.linkedin or "", "github": c.github or "",
+            "skills": c.skills or [],
+            "services": [s.to_dict(include_company=False) for s in svcs],
+            "created_at": c.created_at.isoformat()+"Z" if c.created_at else None,
+        }
+    })
+
+
+
+# ============================================================
+# SERVICES — Serviços oferecidos pelas empresas
+# ============================================================
+
+@app.route("/api/services/mine")
+@require_auth
+def my_services():
+    """Lista todos os serviços (ativos e inativos) da empresa logada."""
+    db   = get_db()
+    user = current_user(db)
+    if user.type != "company":
+        return jsonify({"error": "Apenas empresas têm serviços."}), 403
+    svcs = (db.query(Service).filter_by(company_id=user.id)
+            .order_by(Service.created_at.desc()).all())
+    return jsonify({"services": [s.to_dict(include_company=False) for s in svcs]})
+
+
+@app.route("/api/services", methods=["POST"])
+@require_auth
+def create_service():
+    """Cria um novo serviço (apenas empresas)."""
+    db   = get_db()
+    user = current_user(db)
+    if user.type != "company":
+        return jsonify({"error": "Apenas empresas podem cadastrar serviços."}), 403
+    d     = request.get_json() or {}
+    title = (d.get("title") or "").strip()
+    price = (d.get("price") or "").strip()
+    if not title or not price:
+        return jsonify({"error": "Título e preço são obrigatórios."}), 400
+    svc = Service(
+        company_id=user.id, title=title,
+        description=(d.get("description") or "").strip(),
+        category=(d.get("category") or "").strip(),
+        price=price,
+        delivery_days=int(d["delivery_days"]) if d.get("delivery_days") else None,
+        active=True,
+    )
+    db.add(svc); db.commit(); db.refresh(svc)
+    return jsonify({"message": "Serviço cadastrado!", "service": svc.to_dict()}), 201
+
+
+@app.route("/api/services/<int:svc_id>", methods=["PUT"])
+@require_auth
+def update_service(svc_id):
+    """Atualiza um serviço da empresa logada."""
+    db   = get_db()
+    user = current_user(db)
+    svc  = db.query(Service).filter_by(id=svc_id, company_id=user.id).first()
+    if not svc:
+        return jsonify({"error": "Serviço não encontrado."}), 404
+    d = request.get_json() or {}
+    for f in ["title", "description", "category", "price"]:
+        if f in d: setattr(svc, f, str(d[f]).strip())
+    if "delivery_days" in d:
+        svc.delivery_days = int(d["delivery_days"]) if d["delivery_days"] else None
+    if "active" in d:
+        svc.active = bool(d["active"])
+    db.commit()
+    return jsonify({"message": "Serviço atualizado!", "service": svc.to_dict()})
+
+
+@app.route("/api/services/<int:svc_id>", methods=["DELETE"])
+@require_auth
+def delete_service(svc_id):
+    """Remove um serviço da empresa logada."""
+    db   = get_db()
+    user = current_user(db)
+    svc  = db.query(Service).filter_by(id=svc_id, company_id=user.id).first()
+    if not svc:
+        return jsonify({"error": "Serviço não encontrado."}), 404
+    db.delete(svc); db.commit()
+    return jsonify({"message": "Serviço removido."})
+
+
+# ============================================================
+# QUOTES — Solicitações de orçamento
+# ============================================================
+
+@app.route("/api/quotes", methods=["POST"])
+@require_auth
+def create_quote():
+    """Qualquer usuário logado solicita orçamento de um serviço."""
+    db   = get_db()
+    user = current_user(db)
+    d    = request.get_json() or {}
+    svc_id = d.get("service_id")
+    if not svc_id:
+        return jsonify({"error": "service_id obrigatório."}), 400
+    svc = db.query(Service).filter_by(id=svc_id, active=True).first()
+    if not svc:
+        return jsonify({"error": "Serviço não encontrado."}), 404
+    if svc.company_id == user.id:
+        return jsonify({"error": "Você não pode solicitar orçamento do próprio serviço."}), 400
+    qr = QuoteRequest(
+        service_id=svc_id, requester_id=user.id,
+        message=(d.get("message") or "").strip()
+    )
+    db.add(qr); db.commit(); db.refresh(qr)
+    # Recarrega com relacionamentos
+    qr = db.query(QuoteRequest).filter_by(id=qr.id).first()
+    return jsonify({"message": "Orçamento solicitado!", "quote": qr.to_dict()}), 201
+
+
+@app.route("/api/quotes/sent")
+@require_auth
+def quotes_sent():
+    """Orçamentos enviados pelo usuário logado."""
+    db   = get_db()
+    user = current_user(db)
+    qrs  = (db.query(QuoteRequest)
+            .filter_by(requester_id=user.id)
+            .order_by(QuoteRequest.created_at.desc())
+            .all())
+    return jsonify({"quotes": [q.to_dict() for q in qrs]})
+
+
+@app.route("/api/quotes/received")
+@require_auth
+def quotes_received():
+    """Orçamentos recebidos pela empresa logada (em todos os seus serviços)."""
+    db   = get_db()
+    user = current_user(db)
+    if user.type != "company":
+        return jsonify({"error": "Apenas empresas têm orçamentos recebidos."}), 403
+    svc_ids = [s.id for s in db.query(Service).filter_by(company_id=user.id).all()]
+    if not svc_ids:
+        return jsonify({"quotes": []})
+    qrs = (db.query(QuoteRequest)
+           .filter(QuoteRequest.service_id.in_(svc_ids))
+           .order_by(QuoteRequest.created_at.desc())
+           .all())
+    return jsonify({"quotes": [q.to_dict() for q in qrs]})
+
+
+@app.route("/api/quotes/<int:qr_id>/respond", methods=["POST"])
+@require_auth
+def respond_quote(qr_id):
+    """Empresa responde a uma solicitação com uma proposta formal (valor + prazo)."""
+    db   = get_db()
+    user = current_user(db)
+    qr   = db.query(QuoteRequest).filter_by(id=qr_id).first()
+    if not qr:
+        return jsonify({"error": "Orçamento não encontrado."}), 404
+    # Garante que é a empresa dona do serviço
+    svc = db.query(Service).filter_by(id=qr.service_id, company_id=user.id).first()
+    if not svc:
+        return jsonify({"error": "Sem permissão."}), 403
+    d     = request.get_json() or {}
+    price = (d.get("price") or "").strip()
+    if not price:
+        return jsonify({"error": "Preço é obrigatório na proposta."}), 400
+    # Remove proposta anterior se existir
+    old = db.query(QuoteProposal).filter_by(quote_request_id=qr_id).first()
+    if old: db.delete(old); db.flush()
+    prop = QuoteProposal(
+        quote_request_id=qr_id, price=price,
+        delivery_days=int(d["delivery_days"]) if d.get("delivery_days") else None,
+        notes=(d.get("notes") or "").strip(),
+    )
+    db.add(prop)
+    qr.status = "responded"
+    db.commit()
+    qr = db.query(QuoteRequest).filter_by(id=qr_id).first()
+    return jsonify({"message": "Proposta enviada! 💼", "quote": qr.to_dict()})
+
+
+@app.route("/api/quotes/<int:qr_id>/status", methods=["PUT"])
+@require_auth
+def update_quote_status(qr_id):
+    """Solicitante aceita, rejeita ou cancela um orçamento."""
+    db   = get_db()
+    user = current_user(db)
+    qr   = db.query(QuoteRequest).filter_by(id=qr_id, requester_id=user.id).first()
+    if not qr:
+        return jsonify({"error": "Orçamento não encontrado."}), 404
+    status = (request.get_json() or {}).get("status", "")
+    if status not in ("accepted", "rejected", "cancelled"):
+        return jsonify({"error": "Status inválido. Use: accepted, rejected ou cancelled."}), 400
+    qr.status = status
+    db.commit()
+    labels = {"accepted": "aceito", "rejected": "rejeitado", "cancelled": "cancelado"}
+    return jsonify({"message": f"Orçamento {labels[status]}!", "status": status})
+
+
+
+
+
+
+
+
+
+
+
 
 
 @app.route("/api/credits/purchase", methods=["POST"])

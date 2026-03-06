@@ -78,6 +78,16 @@
 
     <button class="btn btn-ghost" onclick="App.navigate('jobs')">🔍 Vagas</button>
 
+
+    
+<button class="btn btn-ghost" onclick="App.navigate('companies')">🏢 Empresas</button>
+<button class="btn btn-ghost" id="nav-quotes-btn" style="display:none;position:relative" onclick="App.navigate('quotes')">
+  📋 Orçamentos
+  <span id="nav-quotes-badge" style="display:none;background:var(--accent);color:#000;border-radius:99px;padding:0 5px;font-size:0.65rem;position:absolute;top:2px;right:2px;font-weight:800">0</span>
+</button>
+
+
+
     <!-- Apenas para empresas (logadas) -->
     <button class="btn btn-ghost" id="nav-post-job-btn" style="display:none" onclick="App.navigate('post-job')">＋ Publicar Vaga</button>
     <button class="btn btn-ghost" id="nav-company-btn" style="display:none;position:relative" onclick="App.navigate('company')">
@@ -106,6 +116,7 @@
         <div class="user-dropdown-divider"></div>
         <button class="user-dropdown-item" onclick="App.closeUserMenu();App.navigate('profile')">👤 Meu Perfil</button>
         <button class="user-dropdown-item" id="ud-btn-applications" style="display:none" onclick="App.closeUserMenu();App.navigate('my-applications')">📨 Minhas Candidaturas</button>
+        <button class="user-dropdown-item" id="ud-btn-quotes" style="display:none" onclick="App.closeUserMenu();App.navigate('quotes')">📋 Meus Orçamentos</button>
         <button class="user-dropdown-item" id="ud-btn-company" style="display:none" onclick="App.closeUserMenu();App.navigate('company')">📋 Minhas Vagas</button>
         <button class="user-dropdown-item" onclick="App.closeUserMenu();App.navigate('pricing')">💎 Comprar Créditos</button>
         <div class="user-dropdown-divider"></div>
@@ -270,6 +281,71 @@
     <div class="jobs-list" id="jobs-list"></div>
   </div>
 </div><!-- /page-jobs -->
+
+
+<!-- ============================================================
+      PAGE: PERFIL PÚBLICO DE EMPRESA
+     ============================================================ -->
+<div class="page" id="page-company-public">
+  <div class="section">
+
+    <!-- Header da empresa -->
+    <div class="profile-header" style="margin-bottom:2rem">
+      <div id="cpub-avatar" style="width:80px;height:80px;border-radius:var(--r-lg);background:linear-gradient(135deg,var(--accent2),var(--accent));display:flex;align-items:center;justify-content:center;font-size:2rem;font-weight:800;color:#fff;flex-shrink:0;overflow:hidden">🏢</div>
+      <div class="profile-info">
+        <div class="profile-name" id="cpub-name">Carregando...</div>
+        <div class="profile-role" id="cpub-role">// EMPRESA</div>
+        <div class="profile-bio" id="cpub-bio"></div>
+        <div class="job-tags" style="margin-top:0.75rem" id="cpub-tags"></div>
+      </div>
+    </div>
+
+    <!-- Serviços -->
+    <div style="margin-bottom:1.5rem">
+      <h3 style="font-family:var(--font-display);font-weight:800;font-size:1.1rem;margin-bottom:1.25rem">🛠️ Serviços Oferecidos</h3>
+      <div id="cpub-services-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1rem">
+        <div class="empty-state"><div class="loading-spinner" style="margin:0 auto"></div></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ============================================================
+      PAGE: PAINEL DE ORÇAMENTOS
+     ============================================================ -->
+<div class="page" id="page-quotes">
+  <div class="section">
+    <div class="section-tag">📋 ORÇAMENTOS</div>
+    <h2 class="section-title" style="margin-bottom:0.5rem">Orçamentos</h2>
+    <p style="color:var(--text3);font-size:0.88rem;margin-bottom:2rem">Gerencie todas as suas solicitações e propostas.</p>
+
+    <!-- Tabs -->
+    <div class="tab-switcher" style="margin-bottom:2rem">
+      <button class="tab-btn active" id="qtab-sent"     onclick="App.quotesTab('sent')">📤 Enviados</button>
+      <button class="tab-btn"        id="qtab-received" onclick="App.quotesTab('received')" id2="qtab-received-wrap" style="display:none">📥 Recebidos</button>
+    </div>
+
+    <!-- Tab: Enviados -->
+    <div id="qpanel-sent">
+      <div id="quotes-sent-list">
+        <div class="empty-state"><div class="loading-spinner" style="margin:0 auto"></div></div>
+      </div>
+    </div>
+
+    <!-- Tab: Recebidos (só empresa) -->
+    <div id="qpanel-received" style="display:none">
+      <div id="quotes-received-list">
+        <div class="empty-state"><div class="loading-spinner" style="margin:0 auto"></div></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
+
 
 
 <!-- ============================================================
@@ -573,6 +649,8 @@
         💬 Mensagens
         <span id="company-unread-badge" style="display:none;background:var(--accent);color:#000;border-radius:99px;padding:1px 7px;font-size:0.68rem;font-weight:800;margin-left:4px">0</span>
       </button>
+      <button class="tab-btn" id="ctab-services"  onclick="App.companyTab('services')">🛠️ Serviços</button>
+      <button class="tab-btn" id="ctab-cquotes"   onclick="App.companyTab('cquotes')">📋 Orçamentos</button>
     </div>
 
     <!-- ── TAB: MINHAS VAGAS ── -->
@@ -636,6 +714,23 @@
     <!-- ── TAB: MENSAGENS ── -->
     <div id="cpanel-messages" style="display:none">
       <div id="company-conversations-list">
+        <div class="empty-state"><div class="loading-spinner" style="margin:0 auto"></div></div>
+      </div>
+    </div>
+
+    <!-- ── TAB: services ── -->
+    <div id="cpanel-services" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:0.75rem">
+        <div style="font-size:0.85rem;color:var(--text3)" id="company-services-count">Carregando...</div>
+        <button class="btn btn-primary btn-sm" onclick="App.openAddService()">＋ Novo Serviço</button>
+      </div>
+      <div id="company-services-list">
+        <div class="empty-state"><div class="loading-spinner" style="margin:0 auto"></div></div>
+      </div>
+    </div>
+
+    <div id="cpanel-cquotes" style="display:none">
+      <div id="company-quotes-received-list">
         <div class="empty-state"><div class="loading-spinner" style="margin:0 auto"></div></div>
       </div>
     </div>
@@ -1225,6 +1320,114 @@
 <div id="toast">
   <span class="toast-icon" id="toast-icon">✅</span>
   <span class="toast-msg"  id="toast-msg">Operação realizada!</span>
+</div>
+
+
+
+
+<!-- MODAL: Solicitar Orçamento -->
+<div class="modal-overlay" id="request-quote-modal">
+  <div class="modal modal-narrow">
+    <button class="modal-close" onclick="UI.closeModal('request-quote-modal')">✕</button>
+    <div class="modal-title">Solicitar Orçamento 📋</div>
+    <div class="modal-sub" id="rq-service-label">Serviço</div>
+
+    <input type="hidden" id="rq-service-id">
+
+    <div class="form-group">
+      <label class="form-label">PREÇO DO SERVIÇO</label>
+      <div id="rq-price-display" style="font-size:1.4rem;font-weight:800;color:var(--accent);margin-bottom:0.5rem">R$ —</div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">MENSAGEM / DETALHES DO PROJETO</label>
+      <textarea class="form-textarea" id="rq-message" placeholder="Descreva o que você precisa, prazo desejado, detalhes do projeto..." style="min-height:120px"></textarea>
+    </div>
+
+    <button class="btn btn-full btn-primary" onclick="App.submitQuoteRequest()">📤 Enviar Solicitação</button>
+  </div>
+</div>
+
+<!-- MODAL: Responder Orçamento (empresa) -->
+<div class="modal-overlay" id="respond-quote-modal">
+  <div class="modal modal-narrow">
+    <button class="modal-close" onclick="UI.closeModal('respond-quote-modal')">✕</button>
+    <div class="modal-title">Enviar Proposta 💼</div>
+    <div class="modal-sub" id="resp-requester-label">Para: —</div>
+
+    <input type="hidden" id="resp-quote-id">
+
+    <div class="form-group">
+      <label class="form-label">MENSAGEM DO SOLICITANTE</label>
+      <div id="resp-message-display" style="background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:10px;padding:0.75rem 1rem;font-size:0.85rem;color:var(--text2);min-height:60px"></div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">VALOR PROPOSTO (R$) *</label>
+        <input type="text" class="form-input" id="resp-price" placeholder="ex: 3500.00">
+      </div>
+      <div class="form-group">
+        <label class="form-label">PRAZO (DIAS)</label>
+        <input type="number" class="form-input" id="resp-days" placeholder="ex: 15" min="1">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">OBSERVAÇÕES DA PROPOSTA</label>
+      <textarea class="form-textarea" id="resp-notes" placeholder="Detalhes, etapas, condições, forma de pagamento..."></textarea>
+    </div>
+
+    <button class="btn btn-full btn-primary" onclick="App.submitQuoteResponse()">💼 Enviar Proposta</button>
+  </div>
+</div>
+
+<!-- MODAL: Adicionar/Editar Serviço -->
+<div class="modal-overlay" id="add-service-modal">
+  <div class="modal modal-narrow">
+    <button class="modal-close" onclick="UI.closeModal('add-service-modal')">✕</button>
+    <div class="modal-title" id="add-svc-title">Novo Serviço 🛠️</div>
+    <input type="hidden" id="svc-edit-id">
+
+    <div class="form-group">
+      <label class="form-label">TÍTULO DO SERVIÇO *</label>
+      <input type="text" class="form-input" id="svc-title" placeholder="ex: Desenvolvimento de Aplicativo Web">
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">CATEGORIA</label>
+        <select class="form-select" id="svc-category">
+          <option value="">Selecione...</option>
+          <option>Desenvolvimento Web</option>
+          <option>Desenvolvimento Mobile</option>
+          <option>Design UI/UX</option>
+          <option>DevOps / Cloud</option>
+          <option>Segurança</option>
+          <option>Dados / IA</option>
+          <option>Consultoria</option>
+          <option>Marketing Digital</option>
+          <option>Outro</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">PRAZO ESTIMADO (DIAS)</label>
+        <input type="number" class="form-input" id="svc-days" placeholder="ex: 30" min="1">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">PREÇO FIXO (R$) *</label>
+      <input type="text" class="form-input" id="svc-price" placeholder="ex: 5000.00">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">DESCRIÇÃO</label>
+      <textarea class="form-textarea" id="svc-description" placeholder="Descreva o que está incluído, metodologia, entregas..."></textarea>
+    </div>
+
+    <button class="btn btn-full btn-primary" onclick="App.saveService()">💾 Salvar Serviço</button>
+  </div>
 </div>
 
 

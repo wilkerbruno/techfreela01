@@ -862,7 +862,7 @@
       top: calc(100% + 10px);
       right: 0;
       min-width: 220px;
-      max-height: 400px;
+      max-height: 500px;
       background: var(--surface2, #1a1a2e);
       border: 1px solid var(--border2, rgba(255,255,255,0.1));
       border-radius: 14px;
